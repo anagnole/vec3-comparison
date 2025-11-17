@@ -1,0 +1,6 @@
+numpy
+chromadb
+psycopg2-binary
+psutil
+matplotlib
+pandas

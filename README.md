@@ -19,3 +19,10 @@ We compare two open-source vector database systems:
 ---
 
 ##  Repository Structure
+
+# Setup
+
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
