@@ -1,4 +1,5 @@
 from vec3.ingest_chroma import ingest_chroma
+from vec3.ingest_pgvector import ingest_pgvector
 
 DATASETS = [
     ("data/10k", "vec3_10k"),
@@ -12,6 +13,9 @@ def main():
     for dataset_dir, collection_name in DATASETS:
         r_chroma = ingest_chroma(dataset_dir, collection_name=collection_name, batch_size=1000)
         results.append(r_chroma)
+
+        r_pg = ingest_pgvector(dataset_dir, batch_size=1000)
+        results.append(r_pg)
 
     for r in results:
         print(
