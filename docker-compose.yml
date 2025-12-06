@@ -1,0 +1,27 @@
+version: '3.8'
+services:
+  postgres:
+    image: "ankane/pgvector"
+    container_name: pgvector_db
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_DB: vecdb
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  chroma:
+    image: chromadb/chroma
+    container_name: chroma_server
+    restart: always
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/app/chroma/chroma
+
+volumes:
+  postgres_data:
+  chroma_data:
