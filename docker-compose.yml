@@ -1,0 +1,31 @@
+version: '3.9'
+services:
+  pgvector:
+    image: ankane/pgvector:latest
+    container_name: pgvector_bench
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: vecdb
+      POSTGRES_USER: user
+      POSTGRES_HOST_AUTH_METHOD: trust
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4g
+        reservations:
+          cpus: '1'
+          memory: 2g
+
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: chroma_bench
+    ports:
+      - "8000:8000"
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4g
