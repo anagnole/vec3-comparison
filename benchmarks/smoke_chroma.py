@@ -1,7 +1,8 @@
 import chromadb
 
 def main():
-    client = chromadb.Client()
+    client = chromadb.HttpClient(host="localhost", port=8000)
+
     collection = client.get_or_create_collection("smoke")
 
     collection.add(

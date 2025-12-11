@@ -1,27 +1,31 @@
-version: '3.8'
+version: '3.9'
 services:
-  postgres:
-    image: "ankane/pgvector"
-    container_name: pgvector_db
+  pgvector:
+    image: ankane/pgvector:latest
+    container_name: pgvector_bench
     restart: always
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: user
       POSTGRES_DB: vecdb
+      POSTGRES_USER: user
       POSTGRES_HOST_AUTH_METHOD: trust
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4g
+        reservations:
+          cpus: '1'
+          memory: 2g
 
   chroma:
-    image: chromadb/chroma
-    container_name: chroma_server
-    restart: always
+    image: chromadb/chroma:latest
+    container_name: chroma_bench
     ports:
       - "8000:8000"
-    volumes:
-      - chroma_data:/app/chroma/chroma
-
-volumes:
-  postgres_data:
-  chroma_data:
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4g

@@ -11,7 +11,7 @@ def get_db_connection():
     )
 
 def run_queries(dataset_queries, table_name="vectors"):
-    conn = get_db_connection()
+    conn = psycopg2.connect("dbname=vecdb")
     cur = conn.cursor()
     latencies = []
 

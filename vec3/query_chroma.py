@@ -4,6 +4,8 @@ from vec3.metrics import latency_stats
 
 def run_queries(dataset_queries, collection_name: str):
     client = chromadb.HttpClient(host="localhost", port=8000)
+
+
     try:
         col = client.get_collection(collection_name)
     except Exception as e:

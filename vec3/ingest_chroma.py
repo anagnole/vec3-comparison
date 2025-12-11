@@ -6,6 +6,7 @@ import chromadb
 
 def ingest_chroma(dataset_dir: str, collection_name: str, batch_size: int = 1000):
     client = chromadb.HttpClient(host="localhost", port=8000)
+
     collection = client.get_or_create_collection(collection_name)
 
     vectors_path = os.path.join(dataset_dir, "vectors.npy")
