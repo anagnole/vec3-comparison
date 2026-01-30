@@ -6,10 +6,10 @@ import json
 
 
 DATASETS = [
-    # ("data/10k", "vec3_10k"),
-    # ("data/100k", "vec3_100k"),
-    # ("data/500k", "vec3_500k"),
+    ("data/10k", "vec3_10k"),
+    ("data/100k", "vec3_100k"),
     ("data/200k", "vec3_200k"),
+    ("data/500k", "vec3_500k"),
 ]
 
 
@@ -30,26 +30,39 @@ def run_all_ingestion_batches(datasets,plot_title, batch_size=1000):
     for idx, (dataset_dir, collection_name) in enumerate(datasets, start=1):
 
         print(f"[ {idx}/{total} ] Ingesting Chroma for '{dataset_dir}'...")
+
+        #use a unique collection per batch size so runs don't mix state
+        chroma_collection = f"{collection_name}_b{batch_size}"
+
         r_chroma = ingest_chroma(
             dataset_dir,
-            collection_name=collection_name,
+            collection_name=chroma_collection,  
             batch_size=batch_size
         )
         results.append(r_chroma)
 
-        print(f"[ {idx}/{total} ] Ingesting Pgvector for '{dataset_dir}'...")
+        # Map dataset -> pgvector table
+        # data/10k -> vectors_10k, data/100k -> vectors_100k, etc.
+        ds_label = os.path.basename(dataset_dir)
+        pg_table = f"vectors_{ds_label}"
+
+        print(f"[ {idx}/{total} ] Ingesting Pgvector for '{dataset_dir}' into {pg_table}...")
         r_pg = ingest_pgvector(
             dataset_dir,
             batch_size=batch_size,
             create_index=True,
+            table_name=pg_table,  
         )
         results.append(r_pg)
 
     # Print summary to console
     for r in results:
+        extra = ""
+        if r.get("db") == "pgvector":
+            extra = f" | table={r.get('table')}"
         print(
             f"{r['db']} | dataset={r['dataset_dir']} | vectors={r['vectors']} | "
-            f"time={r['duration_sec']:.2f}s | vps={r['vectors_per_sec']:.2f}"
+            f"time={r['duration_sec']:.2f}s | vps={r['vectors_per_sec']:.2f}{extra}"
         )
 
     if not results:
@@ -104,9 +117,9 @@ def run_all_ingestion_batches(datasets,plot_title, batch_size=1000):
 
 def main():
     # `batch_size` can be changed here or passed as CLI params later.
-    run_all_ingestion_batches(DATASETS, "benchmark_run_small_batches_200", batch_size=500)
-    run_all_ingestion_batches(DATASETS, "benchmark_run_200", batch_size=1000)
-    run_all_ingestion_batches(DATASETS, "benchmark_run_large_batches_200", batch_size=5000)
+    run_all_ingestion_batches(DATASETS, "benchmark_run_small_batches_all", batch_size=500)
+    run_all_ingestion_batches(DATASETS, "benchmark_run_all", batch_size=1000)
+    run_all_ingestion_batches(DATASETS, "benchmark_run_large_batches_all", batch_size=5000)
 
 
 if __name__ == "__main__":

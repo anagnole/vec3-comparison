@@ -3,6 +3,7 @@ import time
 import json
 import numpy as np
 import psycopg2
+from psycopg2 import sql
 
 def get_db_connection():
     return psycopg2.connect(
@@ -17,12 +18,13 @@ def ingest_pgvector(
     batch_size: int = 1000,
     lists: int = 100,
     create_index: bool = True,
+    table_name: str = "vectors",
 ):
     conn = get_db_connection()
     cur = conn.cursor()
 
-    print("→ Resetting table...")
-    cur.execute("TRUNCATE TABLE vectors;")
+    print(f"→ Resetting table '{table_name}'...")
+    cur.execute(sql.SQL("TRUNCATE TABLE {}").format(sql.Identifier(table_name)))    
     conn.commit()
 
     vectors_path = os.path.join(dataset_dir, "vectors.npy")
@@ -32,7 +34,7 @@ def ingest_pgvector(
     metadata = [json.loads(line) for line in open(metadata_path)]
 
     n = len(vectors)
-    print(f"→ Loading {n} vectors from {dataset_dir} ...")
+    print(f"→ Loading {n} vectors from {dataset_dir} into table {table_name} ...")
 
     start = time.perf_counter()
 
@@ -47,7 +49,8 @@ def ingest_pgvector(
         ]
 
         cur.executemany(
-            "INSERT INTO vectors (embedding, cls) VALUES (%s, %s)",
+            sql.SQL("INSERT INTO {} (embedding, cls) VALUES (%s, %s)")
+               .format(sql.Identifier(table_name)),
             args,
         )
 
@@ -61,32 +64,37 @@ def ingest_pgvector(
 
     print(f"✓ Insert phase completed in {duration_ingest:.2f}s ({vps_ingest:.2f} v/s)")
 
-    # --------------------------
     # INDEX CREATION
-    # --------------------------
     index_time = None
 
     if create_index:
         print("→ Creating IVFFLAT index...")
 
+        #make index name unique per table to avoid collisions
+        index_name = f"{table_name}_embedding_idx"
+
         # Drop old index
-        cur.execute("DROP INDEX IF EXISTS vectors_embedding_idx;")
+        cur.execute(sql.SQL("DROP INDEX IF EXISTS {}").format(sql.Identifier(index_name)))
         conn.commit()
 
         start_idx = time.perf_counter()
 
         cur.execute(
-            f"""
-            CREATE INDEX vectors_embedding_idx
-            ON vectors
-            USING ivfflat (embedding vector_l2_ops)
-            WITH (lists = {lists});
-            """
+            sql.SQL("""
+                CREATE INDEX {}
+                ON {}
+                USING ivfflat (embedding vector_l2_ops)
+                WITH (lists = %s);
+            """).format(
+                sql.Identifier(index_name),
+                sql.Identifier(table_name),
+            ),
+            (lists,)
         )
         conn.commit()
 
         # Required or PG will ignore the index
-        cur.execute("ANALYZE vectors;")
+        cur.execute(sql.SQL("ANALYZE {}").format(sql.Identifier(table_name)))
         conn.commit()
 
         index_time = time.perf_counter() - start_idx
@@ -97,6 +105,7 @@ def ingest_pgvector(
 
     return {
         "db": "pgvector",
+        "table": table_name,
         "dataset_dir": dataset_dir,
         "vectors": n,
         "duration_sec": duration_ingest + (index_time or 0),

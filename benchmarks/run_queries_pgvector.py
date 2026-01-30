@@ -6,7 +6,8 @@ from vec3.query_pgvector import run_queries
 DATASETS = [
     ("10k", "data/10k/vectors.npy"),
     ("100k", "data/100k/vectors.npy"),
-    ("500k", "data/500k/vectors.npy")
+    ("200k", "data/200k/vectors.npy"),
+    ("500k", "data/500k/vectors.npy"),
 ]
 NUM_QUERIES = 100
 CLASSES = ["A", "B", "C"] 
@@ -36,8 +37,10 @@ def main():
         queries = generate_test_queries(path)
         if not queries: continue
 
-        print(f"Running {len(queries)} queries on Pgvector...")
-        stats = run_queries(queries, table_name="vectors")
+        table_name = f"vectors_{name}"
+
+        print(f"Running {len(queries)} queries on Pgvector (table={table_name})...")
+        stats = run_queries(queries, table_name=table_name)
         
         print(f"Results for {name}:")
         print(f"  Mean Latency: {stats['mean']:.4f} s")
