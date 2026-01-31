@@ -4,8 +4,15 @@ import json
 import numpy as np
 import chromadb
 
-def ingest_chroma(dataset_dir: str, collection_name: str, batch_size: int = 1000):
+def ingest_chroma(dataset_dir: str, collection_name: str, batch_size: int = 1000, reset_collection: bool = True):
     client = chromadb.HttpClient(host="localhost", port=8000)
+
+    # If we benchmark ingestion, we want clean state (no duplicates / no mixed runs)
+    if reset_collection:
+        try:
+            client.delete_collection(collection_name)
+        except Exception:
+            pass
 
     collection = client.get_or_create_collection(collection_name)
 
@@ -13,7 +20,8 @@ def ingest_chroma(dataset_dir: str, collection_name: str, batch_size: int = 1000
     metadata_path = os.path.join(dataset_dir, "metadata.jsonl")
 
     vectors = np.load(vectors_path)
-    metadata = [json.loads(line) for line in open(metadata_path)]
+    with open(metadata_path, "r") as f:
+        metadata = [json.loads(line) for line in f]
 
     n = len(vectors)
     start = time.perf_counter()
