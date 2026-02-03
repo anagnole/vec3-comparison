@@ -1,6 +1,6 @@
 #!/bin/bash
 
-CONTAINER=pgvector_bench   # <-- update this to match your container name
+CONTAINER=pgvector_bench  
 DB=vecdb
 
 

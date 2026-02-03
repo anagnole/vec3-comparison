@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Start both the API and the Vite web UI in background and save PIDs/logs.
 
-ROOT=$(cd "$(dirname "$0")"/.. && pwd)
+ROOT=$(cd "$(dirname "$0")"/../.. && pwd)
 echo "Project root: $ROOT"
 
 if [ -f "$ROOT/.venv/bin/activate" ]; then

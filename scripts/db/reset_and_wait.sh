@@ -2,7 +2,7 @@
 set -e
 
 echo "=== Resetting Docker environment ==="
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 
 echo "→ Stopping containers and removing volumes..."
 docker compose down -v

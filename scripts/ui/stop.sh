@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # Stop the background API and Vite servers started by start_ui.sh
-# Usage: ./scripts/stop_ui.sh
+# Usage: ./scripts/ui/stop.sh
 
-ROOT=$(cd "$(dirname "$0")"/.. && pwd)
+ROOT=$(cd "$(dirname "$0")"/../.. && pwd)
 mkdir -p "$ROOT/tmp"
 
 if [ -f "$ROOT/tmp/vec3_api.pid" ]; then
