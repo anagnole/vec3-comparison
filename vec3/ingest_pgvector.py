@@ -3,6 +3,7 @@ import time
 import json
 import numpy as np
 import psycopg2
+from psycopg2 import sql
 
 
 def get_db_connection():
@@ -24,6 +25,7 @@ def ingest_pgvector(
     batch_size: int = 1000,
     lists: int = 100,
     create_index: bool = True,
+    table_name: str = "vectors",
 ):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -64,7 +66,8 @@ def ingest_pgvector(
         ]
 
         cur.executemany(
-            "INSERT INTO vectors (embedding, cls) VALUES (%s, %s)",
+            sql.SQL("INSERT INTO {} (embedding, cls) VALUES (%s, %s)")
+               .format(sql.Identifier(table_name)),
             args,
         )
 
@@ -91,12 +94,16 @@ def ingest_pgvector(
         start_idx = time.perf_counter()
 
         cur.execute(
-            f"""
-            CREATE INDEX vectors_embedding_idx
-            ON vectors
-            USING ivfflat (embedding vector_l2_ops)
-            WITH (lists = {lists});
-            """
+            sql.SQL("""
+                CREATE INDEX {}
+                ON {}
+                USING ivfflat (embedding vector_l2_ops)
+                WITH (lists = %s);
+            """).format(
+                sql.Identifier(index_name),
+                sql.Identifier(table_name),
+            ),
+            (lists,)
         )
         conn.commit()
 
@@ -114,6 +121,7 @@ def ingest_pgvector(
 
     return {
         "db": "pgvector",
+        "table": table_name,
         "dataset_dir": dataset_dir,
         "vectors": n,
         "dimensions": dim,

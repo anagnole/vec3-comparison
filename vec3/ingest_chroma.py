@@ -37,7 +37,8 @@ def ingest_chroma(dataset_dir: str, collection_name: str, batch_size: int = 1000
     metadata_path = os.path.join(dataset_dir, "metadata.jsonl")
 
     vectors = np.load(vectors_path)
-    metadata = [json.loads(line) for line in open(metadata_path)]
+    with open(metadata_path, "r") as f:
+        metadata = [json.loads(line) for line in f]
 
     n = len(vectors)
     dim = vectors.shape[1]
