@@ -1,13 +1,37 @@
 import os
 import time
 import json
+import subprocess
 import numpy as np
 import chromadb
+
+
+def get_chroma_storage_bytes():
+    try:
+        result = subprocess.run(
+            ["docker", "exec", "chroma_bench", "du", "-sb", "/data"],
+            capture_output=True, text=True, timeout=60
+        )
+        if result.returncode == 0:
+            return int(result.stdout.split()[0])
+    except Exception as e:
+        print(f"  Warning: Could not get Chroma storage: {e}")
+    return None
+
 
 def ingest_chroma(dataset_dir: str, collection_name: str, batch_size: int = 1000):
     client = chromadb.HttpClient(host="localhost", port=8000)
 
-    collection = client.get_or_create_collection(collection_name)
+    for col in client.list_collections():
+        if col.name == collection_name:
+            client.delete_collection(collection_name)
+            break
+
+    time.sleep(0.5)
+    storage_before = get_chroma_storage_bytes()
+    print(f"  Storage before: {storage_before} bytes" if storage_before else "  Storage before: N/A")
+
+    collection = client.create_collection(collection_name)
 
     vectors_path = os.path.join(dataset_dir, "vectors.npy")
     metadata_path = os.path.join(dataset_dir, "metadata.jsonl")
@@ -16,6 +40,9 @@ def ingest_chroma(dataset_dir: str, collection_name: str, batch_size: int = 1000
     metadata = [json.loads(line) for line in open(metadata_path)]
 
     n = len(vectors)
+    dim = vectors.shape[1]
+    print(f"→ Loading {n} vectors (dim={dim}) into Chroma collection '{collection_name}'...")
+
     start = time.perf_counter()
 
     idx = 0
@@ -31,15 +58,33 @@ def ingest_chroma(dataset_dir: str, collection_name: str, batch_size: int = 1000
         )
 
         idx += batch_size
+        if idx % (batch_size * 10) == 0:
+            print(f"  inserted {idx}/{n}...")
 
     duration = time.perf_counter() - start
     vps = n / duration if duration > 0 else 0.0
+
+    time.sleep(1)
+    storage_after = get_chroma_storage_bytes()
+    print(f"  Storage after: {storage_after} bytes" if storage_after else "  Storage after: N/A")
+    
+    storage_bytes = None
+    if storage_before is not None and storage_after is not None:
+        storage_bytes = storage_after - storage_before
+
+    print(f"✓ Chroma ingestion completed in {duration:.2f}s ({vps:.2f} v/s)")
+    if storage_bytes and storage_bytes > 0:
+        print(f"  Storage used: {storage_bytes / (1024*1024):.2f} MB")
 
     return {
         "db": "chroma",
         "collection": collection_name,
         "dataset_dir": dataset_dir,
         "vectors": n,
+        "dimensions": dim,
+        "batch_size": batch_size,
+        "index_type": "HNSW",
         "duration_sec": duration,
         "vectors_per_sec": vps,
+        "storage_bytes": storage_bytes,
     }

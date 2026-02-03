@@ -4,6 +4,7 @@ import json
 import numpy as np
 import psycopg2
 
+
 def get_db_connection():
     return psycopg2.connect(
         dbname="vecdb",
@@ -11,6 +12,12 @@ def get_db_connection():
         host="localhost",
         port="5432"
     )
+
+
+def get_table_size_bytes(cur, table_name="vectors"):
+    cur.execute(f"SELECT pg_total_relation_size('{table_name}');")
+    return cur.fetchone()[0]
+
 
 def ingest_pgvector(
     dataset_dir: str,
@@ -21,10 +28,6 @@ def ingest_pgvector(
     conn = get_db_connection()
     cur = conn.cursor()
 
-    print("→ Resetting table...")
-    cur.execute("TRUNCATE TABLE vectors;")
-    conn.commit()
-
     vectors_path = os.path.join(dataset_dir, "vectors.npy")
     metadata_path = os.path.join(dataset_dir, "metadata.jsonl")
 
@@ -32,7 +35,21 @@ def ingest_pgvector(
     metadata = [json.loads(line) for line in open(metadata_path)]
 
     n = len(vectors)
-    print(f"→ Loading {n} vectors from {dataset_dir} ...")
+    dim = vectors.shape[1]
+
+    print(f"→ Creating vector extension and recreating table with dimension {dim}...")
+    cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+    cur.execute("DROP TABLE IF EXISTS vectors CASCADE;")
+    cur.execute(f"""
+        CREATE TABLE vectors (
+            id SERIAL PRIMARY KEY,
+            embedding vector({dim}),
+            cls TEXT
+        );
+    """)
+    conn.commit()
+
+    print(f"→ Loading {n} vectors (dim={dim}) into pgvector...")
 
     start = time.perf_counter()
 
@@ -61,15 +78,13 @@ def ingest_pgvector(
 
     print(f"✓ Insert phase completed in {duration_ingest:.2f}s ({vps_ingest:.2f} v/s)")
 
-    # --------------------------
-    # INDEX CREATION
-    # --------------------------
+    storage_before_index = get_table_size_bytes(cur)
+
     index_time = None
 
     if create_index:
         print("→ Creating IVFFLAT index...")
 
-        # Drop old index
         cur.execute("DROP INDEX IF EXISTS vectors_embedding_idx;")
         conn.commit()
 
@@ -85,12 +100,14 @@ def ingest_pgvector(
         )
         conn.commit()
 
-        # Required or PG will ignore the index
         cur.execute("ANALYZE vectors;")
         conn.commit()
 
         index_time = time.perf_counter() - start_idx
         print(f"✓ Index built in {index_time:.2f}s")
+
+    storage_total = get_table_size_bytes(cur)
+    print(f"  Storage used: {storage_total / (1024*1024):.2f} MB (table+index)")
 
     cur.close()
     conn.close()
@@ -99,8 +116,13 @@ def ingest_pgvector(
         "db": "pgvector",
         "dataset_dir": dataset_dir,
         "vectors": n,
+        "dimensions": dim,
+        "batch_size": batch_size,
+        "index_type": f"IVFFlat(lists={lists})",
         "duration_sec": duration_ingest + (index_time or 0),
         "duration_ingest_sec": duration_ingest,
         "duration_index_sec": index_time,
         "vectors_per_sec": vps_ingest,
+        "storage_bytes": storage_total,
+        "storage_before_index_bytes": storage_before_index,
     }
