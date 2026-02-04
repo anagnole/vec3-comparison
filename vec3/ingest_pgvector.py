@@ -26,6 +26,9 @@ def ingest_pgvector(
     lists: int = 100,
     create_index: bool = True,
     table_name: str = "vectors",
+    index_type: str = "ivfflat",
+    hnsw_m: int = 16,
+    hnsw_ef_construction: int = 64,
 ):
     conn = get_db_connection()
     cur = conn.cursor()
@@ -41,14 +44,15 @@ def ingest_pgvector(
 
     print(f"→ Creating vector extension and recreating table with dimension {dim}...")
     cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-    cur.execute("DROP TABLE IF EXISTS vectors CASCADE;")
-    cur.execute(f"""
-        CREATE TABLE vectors (
+    cur.execute(sql.SQL("DROP TABLE IF EXISTS {} CASCADE;").format(sql.Identifier(table_name)))
+    create_sql = f"""
+        CREATE TABLE "{table_name}" (
             id SERIAL PRIMARY KEY,
             embedding vector({dim}),
             cls TEXT
         );
-    """)
+    """
+    cur.execute(create_sql)
     conn.commit()
 
     print(f"→ Loading {n} vectors (dim={dim}) into pgvector...")
@@ -81,39 +85,58 @@ def ingest_pgvector(
 
     print(f"✓ Insert phase completed in {duration_ingest:.2f}s ({vps_ingest:.2f} v/s)")
 
-    storage_before_index = get_table_size_bytes(cur)
+    storage_before_index = get_table_size_bytes(cur, table_name)
 
     index_time = None
+    index_name = f"{table_name}_embedding_idx"
+    index_info = "none"
 
-    if create_index:
-        print("→ Creating IVFFLAT index...")
-
-        cur.execute("DROP INDEX IF EXISTS vectors_embedding_idx;")
+    if create_index and index_type != "none":
+        cur.execute(sql.SQL("DROP INDEX IF EXISTS {};").format(sql.Identifier(index_name)))
         conn.commit()
 
         start_idx = time.perf_counter()
 
-        cur.execute(
-            sql.SQL("""
-                CREATE INDEX {}
-                ON {}
-                USING ivfflat (embedding vector_l2_ops)
-                WITH (lists = %s);
-            """).format(
-                sql.Identifier(index_name),
-                sql.Identifier(table_name),
-            ),
-            (lists,)
-        )
+        if index_type == "hnsw":
+            print(f"→ Creating HNSW index (m={hnsw_m}, ef_construction={hnsw_ef_construction})...")
+            cur.execute(
+                sql.SQL("""
+                    CREATE INDEX {}
+                    ON {}
+                    USING hnsw (embedding vector_l2_ops)
+                    WITH (m = %s, ef_construction = %s);
+                """).format(
+                    sql.Identifier(index_name),
+                    sql.Identifier(table_name),
+                ),
+                (hnsw_m, hnsw_ef_construction)
+            )
+            index_info = f"hnsw(m={hnsw_m},ef={hnsw_ef_construction})"
+        else:
+            print(f"→ Creating IVFFlat index (lists={lists})...")
+            cur.execute(
+                sql.SQL("""
+                    CREATE INDEX {}
+                    ON {}
+                    USING ivfflat (embedding vector_l2_ops)
+                    WITH (lists = %s);
+                """).format(
+                    sql.Identifier(index_name),
+                    sql.Identifier(table_name),
+                ),
+                (lists,)
+            )
+            index_info = f"ivfflat(lists={lists})"
+
         conn.commit()
 
-        cur.execute("ANALYZE vectors;")
+        cur.execute(sql.SQL("ANALYZE {};").format(sql.Identifier(table_name)))
         conn.commit()
 
         index_time = time.perf_counter() - start_idx
         print(f"✓ Index built in {index_time:.2f}s")
 
-    storage_total = get_table_size_bytes(cur)
+    storage_total = get_table_size_bytes(cur, table_name)
     print(f"  Storage used: {storage_total / (1024*1024):.2f} MB (table+index)")
 
     cur.close()
@@ -126,7 +149,7 @@ def ingest_pgvector(
         "vectors": n,
         "dimensions": dim,
         "batch_size": batch_size,
-        "index_type": f"IVFFlat(lists={lists})",
+        "index_type": index_info,
         "duration_sec": duration_ingest + (index_time or 0),
         "duration_ingest_sec": duration_ingest,
         "duration_index_sec": index_time,

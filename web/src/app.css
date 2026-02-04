@@ -90,6 +90,49 @@ input{
 }
 input:focus{ border-color: rgba(99,102,241,.6); box-shadow: 0 0 0 3px rgba(99,102,241,.18); }
 
+select{
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(0,0,0,.25);
+  color: var(--text);
+  padding: 0 10px;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='rgba(255,255,255,0.6)' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 30px;
+}
+select:focus{ border-color: rgba(99,102,241,.6); box-shadow: 0 0 0 3px rgba(99,102,241,.18); }
+select option{
+  background: #1a1f35;
+  color: var(--text);
+}
+
+input[type="checkbox"]{
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: rgba(0,0,0,.25);
+  cursor: pointer;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+input[type="checkbox"]:checked{
+  background: rgba(99,102,241,.35);
+  border-color: rgba(99,102,241,.6);
+}
+input[type="checkbox"]:checked::after{
+  content: '✓';
+  color: var(--text);
+  font-size: 12px;
+}
+
 .btn{
   height: 36px;
   padding: 0 12px;

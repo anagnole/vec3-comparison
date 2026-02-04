@@ -1,13 +1,8 @@
-import React, { useState, useRef, useMemo } from 'react'
+import React, { useState, useRef, useMemo, useEffect } from 'react'
 import './app.css'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 
-const PRESETS = {
-  Small: { size: 1000, dim: 64, out: 'data/test_small' },
-  Medium: { size: 10000, dim: 128, out: 'data/test_medium' },
-  Large: { size: 100000, dim: 256, out: 'data/test_large' },
-}
 
 function cx(...xs) {
   return xs.filter(Boolean).join(' ')
@@ -22,67 +17,97 @@ function StatusBadge({ status }) {
   return <span className="badge badge-muted">{s}</span>
 }
 
+function ContainerBadge({ status }) {
+  if (!status) return <span className="badge badge-muted">unknown</span>
+  const s = status.toLowerCase()
+  if (s === 'running') return <span className="badge badge-ok">running</span>
+  if (s === 'exited') return <span className="badge badge-bad">stopped</span>
+  return <span className="badge badge-muted">{s}</span>
+}
+
+
 export default function App() {
-  const [size, setSize] = useState(PRESETS.Medium.size)
-  const [dim, setDim] = useState(PRESETS.Medium.dim)
-  const [out, setOut] = useState(PRESETS.Medium.out)
-  const [dataDir, setDataDir] = useState(PRESETS.Medium.out)
   const [jobId, setJobId] = useState(null)
   const [jobStatus, setJobStatus] = useState(null)
   const [stdout, setStdout] = useState('')
   const [stderr, setStderr] = useState('')
-  const [plots, setPlots] = useState([])
-  const [metrics, setMetrics] = useState(null)
   const [activeLog, setActiveLog] = useState('stdout')
   const logRef = useRef(null)
-
   const isRunning = jobStatus?.status === 'running'
 
-  function applyPreset(name) {
-    const p = PRESETS[name]
-    if (!p) return
-    setSize(p.size)
-    setDim(p.dim)
-    setOut(p.out)
-    setDataDir(p.out)
+  const [dockerStatus, setDockerStatus] = useState({ chroma: null, pgvector: null })
+
+  const [datasets, setDatasets] = useState([])
+
+  const [genSize, setGenSize] = useState(10000)
+  const [genDim, setGenDim] = useState(128)
+  const [genOut, setGenOut] = useState('data/10k')
+  const [genDist, setGenDist] = useState('uniform')
+  const [genClasses, setGenClasses] = useState('A,B,C')
+  const [genClassDist, setGenClassDist] = useState('')
+  const [genSeed, setGenSeed] = useState('')
+
+  const [ingestDataset, setIngestDataset] = useState('')
+  const [ingestBatchSize, setIngestBatchSize] = useState(1000)
+  const [ingestIndexType, setIngestIndexType] = useState('ivfflat')
+  const [ingestLists, setIngestLists] = useState(100)
+  const [ingestHnswM, setIngestHnswM] = useState(16)
+  const [ingestHnswEf, setIngestHnswEf] = useState(64)
+  const [ingestFresh, setIngestFresh] = useState(false)
+
+  const [queryDataset, setQueryDataset] = useState('')
+  const [queryMode, setQueryMode] = useState('both')
+  const [queryIndexType, setQueryIndexType] = useState('ivfflat')
+  const [queryMetric, setQueryMetric] = useState('euclidean')
+  const [queryNoRestart, setQueryNoRestart] = useState(false)
+  const [queryFresh, setQueryFresh] = useState(false)
+
+  const [ingestionPlots, setIngestionPlots] = useState([])
+  const [queryPlots, setQueryPlots] = useState([])
+
+  useEffect(() => {
+    loadDockerStatus()
+    loadDatasets()
+    loadPlots()
+  }, [])
+
+  async function loadDockerStatus() {
+    try {
+      const r = await fetch(`${API}/docker/status`)
+      const j = await r.json()
+      setDockerStatus(j)
+    } catch {}
   }
 
-  async function startGenerate() {
-    const resp = await fetch(`${API}/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ size, dim, out }),
-    })
-    const j = await resp.json()
-    setJobId(j.jobId)
-    setStdout('')
-    setStderr('')
-    pollJob(j.jobId)
+  async function loadDatasets() {
+    try {
+      const r = await fetch(`${API}/datasets`)
+      const j = await r.json()
+      setDatasets(j.datasets || [])
+      if (j.datasets?.length && !ingestDataset) {
+        setIngestDataset(j.datasets[0].name)
+        setQueryDataset(j.datasets[0].name)
+      }
+    } catch {}
   }
 
-  async function startIngest(target) {
-    const resp = await fetch(`${API}/ingest/${target}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data_dir: dataDir }),
-    })
-    const j = await resp.json()
-    setJobId(j.jobId)
-    setStdout('')
-    setStderr('')
-    pollJob(j.jobId)
+  async function loadPlots() {
+    try {
+      const r = await fetch(`${API}/plots/ingestion`)
+      const j = await r.json()
+      // Filter to only existing plots, extract just the filename
+      const existing = (j.plots || []).filter(p => p.exists).map(p => `${p.name}.png`)
+      setIngestionPlots(existing)
+    } catch {}
+    try {
+      const r = await fetch(`${API}/plots/queries`)
+      const j = await r.json()
+      const existing = (j.plots || []).filter(p => p.exists).map(p => `${p.name}.png`)
+      setQueryPlots(existing)
+    } catch {}
   }
 
-  async function docker(action) {
-    const resp = await fetch(`${API}/docker/${action}`, { method: 'POST' })
-    const j = await resp.json()
-    setJobId(j.jobId)
-    setStdout('')
-    setStderr('')
-    pollJob(j.jobId)
-  }
-
-  function pollJob(id) {
+  function pollJob(id, onComplete) {
     setJobStatus({ status: 'running' })
     const interval = setInterval(async () => {
       try {
@@ -95,9 +120,94 @@ export default function App() {
         if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
         if (s.status === 'completed' || s.status === 'failed' || s.status === 'error') {
           clearInterval(interval)
+          if (onComplete) onComplete(s.status === 'completed')
         }
       } catch {}
     }, 1000)
+  }
+
+  async function docker(action) {
+    setStdout('')
+    setStderr('')
+    const resp = await fetch(`${API}/docker/${action}`, { method: 'POST' })
+    const j = await resp.json()
+    setJobId(j.jobId)
+    pollJob(j.jobId, () => loadDockerStatus())
+  }
+
+  async function startGenerate() {
+    setStdout('')
+    setStderr('')
+    const body = {
+      size: genSize,
+      dim: genDim,
+      out: genOut,
+      distribution: genDist,
+    }
+    if (genClasses) body.classes = genClasses
+    if (genClassDist) body.classDist = genClassDist
+    if (genSeed) body.seed = parseInt(genSeed, 10)
+    
+    const resp = await fetch(`${API}/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const j = await resp.json()
+    setJobId(j.jobId)
+    pollJob(j.jobId, () => loadDatasets())
+  }
+
+  async function startIngestion() {
+    setStdout('')
+    setStderr('')
+    const body = {
+      dataset: ingestDataset,
+      batchSize: ingestBatchSize,
+      indexType: ingestIndexType,
+      lists: ingestLists,
+      hnswM: ingestHnswM,
+      hnswEf: ingestHnswEf,
+      fresh: ingestFresh,
+    }
+    const resp = await fetch(`${API}/benchmark/ingest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const j = await resp.json()
+    setJobId(j.jobId)
+    pollJob(j.jobId)
+  }
+
+  async function startQuery() {
+    setStdout('')
+    setStderr('')
+    const body = {
+      dataset: queryDataset,
+      mode: queryMode,
+      indexType: queryIndexType,
+      metric: queryMetric,
+      noRestart: queryNoRestart,
+      fresh: queryFresh,
+    }
+    const resp = await fetch(`${API}/benchmark/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const j = await resp.json()
+    setJobId(j.jobId)
+    pollJob(j.jobId)
+  }
+
+  async function generatePlot(type, plotName) {
+    setStdout('')
+    setStderr('')
+    const resp = await fetch(`${API}/plots/${type}/${plotName}`, { method: 'POST' })
+    const j = await resp.json()
+    setJobId(j.jobId)
+    pollJob(j.jobId, () => loadPlots())
   }
 
   async function copy(text) {
@@ -120,7 +230,7 @@ export default function App() {
       <header className="header">
         <div>
           <div className="kicker">Vec3</div>
-          <h1 className="title">Runner</h1>
+          <h1 className="title">Benchmark Runner</h1>
         </div>
         <div className="headerRight">
           <div className="meta">
@@ -143,167 +253,293 @@ export default function App() {
         <section className="card">
           <div className="cardHeader">
             <h3>Docker</h3>
-            <span className="subtle">Manage services</span>
+            <span className="subtle">Manage database containers</span>
+          </div>
+          <div className="row" style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+              <span>Chroma: <ContainerBadge status={dockerStatus.chroma} /></span>
+              <span>pgvector: <ContainerBadge status={dockerStatus.pgvector} /></span>
+              <button className="btn btnSmall" onClick={loadDockerStatus}>Refresh</button>
+            </div>
           </div>
           <div className="row">
             <button className="btn btnPrimary" onClick={() => docker('up')} disabled={isRunning}>
-              Docker Up
+              Start
             </button>
             <button className="btn" onClick={() => docker('down')} disabled={isRunning}>
-              Docker Down
+              Stop
+            </button>
+            <button className="btn" onClick={() => docker('restart')} disabled={isRunning}>
+              Restart
             </button>
           </div>
         </section>
 
         <section className="card span2">
           <div className="cardHeader">
-            <h3>Results & Plots</h3>
-            <span className="subtle">View generated charts and metrics</span>
+            <h3>Data Generator</h3>
+            <span className="subtle">Create vector datasets</span>
           </div>
 
-          <div className="row">
-            <button
-              className="btn"
-              onClick={async () => {
-                try {
-                  const r = await fetch(`${API}/plots`)
-                  const j = await r.json()
-                  setPlots(j.plots || [])
-                } catch (err) {
-                  setPlots([])
-                }
-              }}
-            >
+          <div style={{ display: 'flex', gap: 24 }}>
+            <div style={{ flex: 1 }}>
+              <div className="form">
+                <label className="field">
+                  <span>Size</span>
+                  <input type="number" value={genSize} onChange={(e) => setGenSize(Number(e.target.value))} disabled={isRunning} />
+                </label>
+                <label className="field">
+                  <span>Dimensions</span>
+                  <input type="number" value={genDim} onChange={(e) => setGenDim(Number(e.target.value))} disabled={isRunning} />
+                </label>
+                <label className="field fieldWide">
+                  <span>Output path</span>
+                  <input value={genOut} onChange={(e) => setGenOut(e.target.value)} disabled={isRunning} />
+                </label>
+                <label className="field">
+                  <span>Distribution</span>
+                  <select value={genDist} onChange={(e) => setGenDist(e.target.value)} disabled={isRunning}>
+                    <option value="uniform">Uniform</option>
+                    <option value="clustered">Clustered</option>
+                    <option value="zipfian">Zipfian</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Classes (comma-sep)</span>
+                  <input value={genClasses} onChange={(e) => setGenClasses(e.target.value)} disabled={isRunning} placeholder="A,B,C" />
+                </label>
+                <label className="field">
+                  <span>Class Dist (optional)</span>
+                  <input value={genClassDist} onChange={(e) => setGenClassDist(e.target.value)} disabled={isRunning} placeholder="0.6,0.3,0.1" />
+                </label>
+                <label className="field">
+                  <span>Seed (optional)</span>
+                  <input type="number" value={genSeed} onChange={(e) => setGenSeed(e.target.value)} disabled={isRunning} />
+                </label>
+              </div>
+              <div className="row" style={{ marginTop: 12 }}>
+                <button className="btn btnPrimary" onClick={startGenerate} disabled={isRunning}>
+                  Generate Dataset
+                </button>
+              </div>
+            </div>
+
+            {/* Dataset List */}
+            <div style={{ flex: 1 }}>
+              <h4 style={{ marginBottom: 8 }}>Available Datasets</h4>
+              <div style={{ maxHeight: 200, overflow: 'auto', background: 'var(--bg-subtle)', padding: 8, borderRadius: 4 }}>
+                {datasets.length === 0 ? (
+                  <div className="subtle">(no datasets found)</div>
+                ) : (
+                  <table style={{ width: '100%', fontSize: 13 }}>
+                    <thead>
+                      <tr><th>Name</th><th>Vectors</th><th>Dim</th></tr>
+                    </thead>
+                    <tbody>
+                      {datasets.map((d) => (
+                        <tr key={d.name}>
+                          <td><code>{d.name}</code></td>
+                          <td>{d.count?.toLocaleString() || '?'}</td>
+                          <td>{d.dimensions || '?'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+              <button className="btn btnSmall" onClick={loadDatasets} style={{ marginTop: 8 }}>
+                Refresh List
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* ============================================================ */}
+        {/* PART 3: INGESTION BENCHMARK */}
+        {/* ============================================================ */}
+        <section className="card span2">
+          <div className="cardHeader">
+            <h3>Ingestion Benchmark</h3>
+            <span className="subtle">Test data loading performance</span>
+          </div>
+
+          <div className="form">
+            <label className="field">
+              <span>Dataset</span>
+              <select value={ingestDataset} onChange={(e) => setIngestDataset(e.target.value)} disabled={isRunning}>
+                {datasets.map((d) => <option key={d.name} value={d.name}>{d.name}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span>Batch Size</span>
+              <input type="number" value={ingestBatchSize} onChange={(e) => setIngestBatchSize(Number(e.target.value))} disabled={isRunning} />
+            </label>
+            <label className="field">
+              <span>Index Type</span>
+              <select value={ingestIndexType} onChange={(e) => setIngestIndexType(e.target.value)} disabled={isRunning}>
+                <option value="ivfflat">IVFFlat</option>
+                <option value="hnsw">HNSW</option>
+              </select>
+            </label>
+            {ingestIndexType === 'ivfflat' ? (
+              <label className="field">
+                <span>Lists</span>
+                <input type="number" value={ingestLists} onChange={(e) => setIngestLists(Number(e.target.value))} disabled={isRunning} />
+              </label>
+            ) : (
+              <>
+                <label className="field">
+                  <span>HNSW M</span>
+                  <input type="number" value={ingestHnswM} onChange={(e) => setIngestHnswM(Number(e.target.value))} disabled={isRunning} />
+                </label>
+                <label className="field">
+                  <span>HNSW ef</span>
+                  <input type="number" value={ingestHnswEf} onChange={(e) => setIngestHnswEf(Number(e.target.value))} disabled={isRunning} />
+                </label>
+              </>
+            )}
+            <label className="field" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input type="checkbox" checked={ingestFresh} onChange={(e) => setIngestFresh(e.target.checked)} disabled={isRunning} />
+              <span>Fresh (clear previous results)</span>
+            </label>
+          </div>
+
+          <div className="row" style={{ marginTop: 12 }}>
+            <button className="btn btnPrimary" onClick={startIngestion} disabled={isRunning || !ingestDataset}>
+              Run Ingestion Benchmark
+            </button>
+            <div className="progressWrap" aria-hidden="true">{progress}</div>
+          </div>
+        </section>
+
+        <section className="card span2">
+          <div className="cardHeader">
+            <h3>Ingestion Plots</h3>
+            <span className="subtle">Generate and view ingestion result charts</span>
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <h4>Generate Plots</h4>
+            <div className="row wrap">
+              {['throughput_comparison', 'storage_comparison', 'memory_usage', 'time_breakdown', 'dimensionality_impact', 'resource_usage', 'index_storage_breakdown', 'index_build_time'].map((name) => (
+                <button key={name} className="pill" onClick={() => generatePlot('ingestion', name)} disabled={isRunning}>
+                  {name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <h4>Generated Plots</h4>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {ingestionPlots.length === 0 ? (
+                <div className="subtle">(no plots yet)</div>
+              ) : (
+                ingestionPlots.map((p) => (
+                  <div key={p} style={{ width: 200 }}>
+                    <img src={`${API}/plots/ingestion/${p}`} alt={p} style={{ width: '100%' }} />
+                    <div style={{ fontSize: 12, textAlign: 'center' }}>{p}</div>
+                  </div>
+                ))
+              )}
+            </div>
+            <button className="btn btnSmall" onClick={loadPlots} style={{ marginTop: 8 }}>
               Refresh Plots
             </button>
-            <button
-              className="btn"
-              onClick={async () => {
-                try {
-                  const r = await fetch(`${API}/metrics`)
-                  if (!r.ok) {
-                    alert('No metrics found')
-                    return
-                  }
-                  const m = await r.json()
-                  setMetrics(m)
-                } catch (err) {
-                  alert('Failed to load metrics')
-                }
-              }}
-            >
-              Load Metrics
-            </button>
-          </div>
-
-          <div style={{ marginTop: 12 }}>
-            <div style={{ display: 'flex', gap: 12 }}>
-              <div style={{ flex: 1 }}>
-                <h4>Plots</h4>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {plots && plots.length ? (
-                    plots.map((p) => (
-                      <div key={p} style={{ width: 200 }}>
-                        <img src={`${API}/plots/${p}`} alt={p} style={{ width: '100%' }} />
-                        <div style={{ fontSize: 12, textAlign: 'center' }}>{p}</div>
-                      </div>
-                    ))
-                  ) : (
-                    <div>(no plots)</div>
-                  )}
-                </div>
-              </div>
-
-              <div style={{ flex: 1 }}>
-                <h4>Metrics</h4>
-                <pre style={{ height: 300, overflow: 'auto', background: '#f6f8fa', padding: 8 }}>
-                  {metrics ? JSON.stringify(metrics, null, 2) : '(no metrics loaded)'}
-                </pre>
-              </div>
-            </div>
           </div>
         </section>
 
-        <section className="card">
+        {/* ============================================================ */}
+        {/* PART 5: QUERY BENCHMARK */}
+        {/* ============================================================ */}
+        <section className="card span2">
           <div className="cardHeader">
-            <h3>Presets</h3>
-            <span className="subtle">Quick sizes</span>
+            <h3>Query Benchmark</h3>
+            <span className="subtle">Test search performance and recall</span>
           </div>
-          <div className="row wrap">
-            {Object.keys(PRESETS).map((k) => (
-              <button key={k} className="pill" onClick={() => applyPreset(k)} disabled={isRunning}>
-                {k}
-              </button>
-            ))}
+
+          <div className="form">
+            <label className="field">
+              <span>Dataset</span>
+              <select value={queryDataset} onChange={(e) => setQueryDataset(e.target.value)} disabled={isRunning}>
+                {datasets.map((d) => <option key={d.name} value={d.name}>{d.name}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span>Mode</span>
+              <select value={queryMode} onChange={(e) => setQueryMode(e.target.value)} disabled={isRunning}>
+                <option value="both">Both (filter + nofilter)</option>
+                <option value="nofilter">No Filter</option>
+                <option value="filter">With Filter</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Index Type</span>
+              <select value={queryIndexType} onChange={(e) => setQueryIndexType(e.target.value)} disabled={isRunning}>
+                <option value="ivfflat">IVFFlat</option>
+                <option value="hnsw">HNSW</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Metric</span>
+              <select value={queryMetric} onChange={(e) => setQueryMetric(e.target.value)} disabled={isRunning}>
+                <option value="euclidean">Euclidean</option>
+                <option value="cosine">Cosine</option>
+                <option value="inner_product">Inner Product</option>
+              </select>
+            </label>
+            <label className="field" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input type="checkbox" checked={queryNoRestart} onChange={(e) => setQueryNoRestart(e.target.checked)} disabled={isRunning} />
+              <span>No Restart (skip container restart)</span>
+            </label>
+            <label className="field" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input type="checkbox" checked={queryFresh} onChange={(e) => setQueryFresh(e.target.checked)} disabled={isRunning} />
+              <span>Fresh (clear previous results)</span>
+            </label>
+          </div>
+
+          <div className="row" style={{ marginTop: 12 }}>
+            <button className="btn btnPrimary" onClick={startQuery} disabled={isRunning || !queryDataset}>
+              Run Query Benchmark
+            </button>
+            <div className="progressWrap" aria-hidden="true">{progress}</div>
           </div>
         </section>
 
         <section className="card span2">
           <div className="cardHeader">
-            <h3>Generate dataset</h3>
-            <span className="subtle">Create vectors on disk</span>
+            <h3>Query Plots</h3>
+            <span className="subtle">Generate and view query result charts</span>
           </div>
 
-          <div className="form">
-            <label className="field">
-              <span>Size</span>
-              <input
-                type="number"
-                value={size}
-                onChange={(e) => setSize(Number(e.target.value))}
-                disabled={isRunning}
-              />
-            </label>
-
-            <label className="field">
-              <span>Dim</span>
-              <input
-                type="number"
-                value={dim}
-                onChange={(e) => setDim(Number(e.target.value))}
-                disabled={isRunning}
-              />
-            </label>
-
-            <label className="field fieldWide">
-              <span>Out</span>
-              <input value={out} onChange={(e) => setOut(e.target.value)} disabled={isRunning} />
-            </label>
-          </div>
-
-          <div className="row">
-            <button className="btn btnPrimary" onClick={startGenerate} disabled={isRunning}>
-              Generate
-            </button>
-            <div className="progressWrap" aria-hidden="true">
-              {progress}
+          <div style={{ marginBottom: 12 }}>
+            <h4>Generate Plots</h4>
+            <div className="row wrap">
+              {['latency_comparison', 'recall_comparison', 'latency_vs_recall', 'topk_impact', 'filter_impact', 'scaling_analysis', 'p99_latency', 'throughput', 'combined_summary'].map((name) => (
+                <button key={name} className="pill" onClick={() => generatePlot('queries', name)} disabled={isRunning}>
+                  {name}
+                </button>
+              ))}
             </div>
           </div>
-        </section>
 
-        <section className="card span2">
-          <div className="cardHeader">
-            <h3>Ingest</h3>
-            <span className="subtle">Load dataset into a target</span>
-          </div>
-
-          <div className="form">
-            <label className="field fieldWide">
-              <span>Data dir</span>
-              <input value={dataDir} onChange={(e) => setDataDir(e.target.value)} disabled={isRunning} />
-            </label>
-          </div>
-
-          <div className="row">
-            <button className="btn btnPrimary" onClick={() => startIngest('chroma')} disabled={isRunning}>
-              Ingest → Chroma
-            </button>
-            <button className="btn" onClick={() => startIngest('pgvector')} disabled={isRunning}>
-              Ingest → pgvector
-            </button>
-            <div className="progressWrap" aria-hidden="true">
-              {progress}
+          <div>
+            <h4>Generated Plots</h4>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {queryPlots.length === 0 ? (
+                <div className="subtle">(no plots yet)</div>
+              ) : (
+                queryPlots.map((p) => (
+                  <div key={p} style={{ width: 200 }}>
+                    <img src={`${API}/plots/queries/${p}`} alt={p} style={{ width: '100%' }} />
+                    <div style={{ fontSize: 12, textAlign: 'center' }}>{p}</div>
+                  </div>
+                ))
+              )}
             </div>
+            <button className="btn btnSmall" onClick={loadPlots} style={{ marginTop: 8 }}>
+              Refresh Plots
+            </button>
           </div>
         </section>
 

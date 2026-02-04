@@ -19,7 +19,8 @@ def get_chroma_storage_bytes():
     return None
 
 
-def ingest_chroma(dataset_dir: str, collection_name: str, batch_size: int = 1000):
+def ingest_chroma(dataset_dir: str, collection_name: str, batch_size: int = 1000,
+                  hnsw_m: int = None, hnsw_ef_construction: int = None, hnsw_ef_search: int = None):
     client = chromadb.HttpClient(host="localhost", port=8000)
 
     for col in client.list_collections():
@@ -31,7 +32,20 @@ def ingest_chroma(dataset_dir: str, collection_name: str, batch_size: int = 1000
     storage_before = get_chroma_storage_bytes()
     print(f"  Storage before: {storage_before} bytes" if storage_before else "  Storage before: N/A")
 
-    collection = client.create_collection(collection_name)
+    # Build HNSW metadata if parameters provided
+    metadata = {}
+    if hnsw_m is not None:
+        metadata["hnsw:M"] = hnsw_m
+    if hnsw_ef_construction is not None:
+        metadata["hnsw:construction_ef"] = hnsw_ef_construction
+    if hnsw_ef_search is not None:
+        metadata["hnsw:search_ef"] = hnsw_ef_search
+    
+    if metadata:
+        print(f"  HNSW params: {metadata}")
+        collection = client.create_collection(collection_name, metadata=metadata)
+    else:
+        collection = client.create_collection(collection_name)
 
     vectors_path = os.path.join(dataset_dir, "vectors.npy")
     metadata_path = os.path.join(dataset_dir, "metadata.jsonl")

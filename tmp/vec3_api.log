@@ -1,0 +1,6 @@
+
+> vec3-api@0.1.0 start
+> node index.js
+
+vec3 API running on http://localhost:3001
+  Web results: /Users/anagnole/Projects/vec3-comparison/results/web

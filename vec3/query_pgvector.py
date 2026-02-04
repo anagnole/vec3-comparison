@@ -3,6 +3,12 @@ import psycopg2
 from psycopg2 import sql
 from vec3.metrics import latency_stats
 
+METRIC_OPERATORS = {
+    "euclidean": "<->",      # L2 distance
+    "cosine": "<=>",         # Cosine distance
+    "inner_product": "<#>",  # Inner product (negative, so smaller = more similar)
+}
+
 def get_db_connection():
     return psycopg2.connect(
         dbname="vecdb",
@@ -11,25 +17,29 @@ def get_db_connection():
         port="5432"
     )
 
-def run_queries(dataset_queries, table_name="vectors", n_results: int = 10):
+def run_queries(dataset_queries, table_name="vectors", n_results: int = 10, 
+                metric: str = "euclidean", return_ids: bool = False):
     conn = get_db_connection()
     cur = conn.cursor()
     latencies = []
+    all_retrieved_ids = [] if return_ids else None
+    
+    operator = METRIC_OPERATORS.get(metric, "<->")
 
     q_no_filter = sql.SQL("""
-        SELECT id, embedding <-> %s::vector AS distance
+        SELECT id, embedding {op} %s::vector AS distance
         FROM {table}
         ORDER BY distance
         LIMIT %s;
-    """).format(table=sql.Identifier(table_name))
+    """).format(table=sql.Identifier(table_name), op=sql.SQL(operator))
 
     q_with_filter = sql.SQL("""
-        SELECT id, embedding <-> %s::vector AS distance
+        SELECT id, embedding {op} %s::vector AS distance
         FROM {table}
         WHERE cls = %s
         ORDER BY distance
         LIMIT %s;
-    """).format(table=sql.Identifier(table_name))
+    """).format(table=sql.Identifier(table_name), op=sql.SQL(operator))
 
     # warmup (not timed)
     first = dataset_queries[0]
@@ -40,7 +50,7 @@ def run_queries(dataset_queries, table_name="vectors", n_results: int = 10):
     cur.fetchall()
 
     for q in dataset_queries:
-        vector = q["vector"]  # κρατάμε list 
+        vector = q["vector"]
         start = time.perf_counter()
 
         if "filter" in q and q["filter"]:
@@ -49,9 +59,16 @@ def run_queries(dataset_queries, table_name="vectors", n_results: int = 10):
         else:
             cur.execute(q_no_filter, (vector, n_results))
 
-        _ = cur.fetchall()
+        results = cur.fetchall()
         latencies.append(time.perf_counter() - start)
+        
+        if return_ids:
+            all_retrieved_ids.append([row[0] for row in results])
 
     cur.close()
     conn.close()
-    return latency_stats(latencies)
+    
+    stats = latency_stats(latencies)
+    if return_ids:
+        return stats, all_retrieved_ids
+    return stats
