@@ -248,6 +248,77 @@ input[type="checkbox"]:checked::after{
 .pre{ margin:0; font-size: 12px; white-space: pre-wrap; word-break: break-word; color: rgba(214,255,214,.92); }
 .logErr .pre{ color: rgba(255,214,214,.92); }
 
+/* Plot scroll container */
+.plotScroll{
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding: 8px 0 16px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.2) transparent;
+}
+.plotScroll::-webkit-scrollbar{
+  height: 8px;
+}
+.plotScroll::-webkit-scrollbar-track{
+  background: rgba(255,255,255,.05);
+  border-radius: 4px;
+}
+.plotScroll::-webkit-scrollbar-thumb{
+  background: rgba(255,255,255,.2);
+  border-radius: 4px;
+}
+.plotScroll::-webkit-scrollbar-thumb:hover{
+  background: rgba(255,255,255,.3);
+}
+
+.plotCard{
+  position: relative;
+  flex-shrink: 0;
+  width: 100%;
+  min-width: 800px;
+  max-width: 900px;
+  background: rgba(0,0,0,.2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.plotCard img{
+  width: 100%;
+  display: block;
+}
+.plotLabel{
+  padding: 8px;
+  font-size: 12px;
+  text-align: center;
+  color: var(--muted);
+  background: rgba(0,0,0,.2);
+  border-top: 1px solid var(--border);
+}
+.plotDelete{
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid rgba(244,63,94,.5);
+  background: rgba(244,63,94,.2);
+  color: rgba(244,63,94,.9);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .15s;
+}
+.plotCard:hover .plotDelete{
+  opacity: 1;
+}
+.plotDelete:hover{
+  background: rgba(244,63,94,.35);
+  border-color: rgba(244,63,94,.7);
+}
+
 @media (max-width: 860px){
   .grid{ grid-template-columns: 1fr; }
   .meta{ min-width: unset; }

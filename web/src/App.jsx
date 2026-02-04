@@ -431,14 +431,24 @@ export default function App() {
 
           <div>
             <h4>Generated Plots</h4>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div className="plotScroll">
               {ingestionPlots.length === 0 ? (
                 <div className="subtle">(no plots yet)</div>
               ) : (
                 ingestionPlots.map((p) => (
-                  <div key={p} style={{ width: 200 }}>
-                    <img src={`${API}/plots/ingestion/${p}`} alt={p} style={{ width: '100%' }} />
-                    <div style={{ fontSize: 12, textAlign: 'center' }}>{p}</div>
+                  <div key={p} className="plotCard">
+                    <button
+                      className="plotDelete"
+                      onClick={async () => {
+                        await fetch(`${API}/plots/ingestion/${p}`, { method: 'DELETE' })
+                        loadPlots()
+                      }}
+                      title="Delete plot"
+                    >
+                      ×
+                    </button>
+                    <img src={`${API}/plots/ingestion/${p}`} alt={p} />
+                    <div className="plotLabel">{p}</div>
                   </div>
                 ))
               )}
@@ -525,14 +535,24 @@ export default function App() {
 
           <div>
             <h4>Generated Plots</h4>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div className="plotScroll">
               {queryPlots.length === 0 ? (
                 <div className="subtle">(no plots yet)</div>
               ) : (
                 queryPlots.map((p) => (
-                  <div key={p} style={{ width: 200 }}>
-                    <img src={`${API}/plots/queries/${p}`} alt={p} style={{ width: '100%' }} />
-                    <div style={{ fontSize: 12, textAlign: 'center' }}>{p}</div>
+                  <div key={p} className="plotCard">
+                    <button
+                      className="plotDelete"
+                      onClick={async () => {
+                        await fetch(`${API}/plots/queries/${p}`, { method: 'DELETE' })
+                        loadPlots()
+                      }}
+                      title="Delete plot"
+                    >
+                      ×
+                    </button>
+                    <img src={`${API}/plots/queries/${p}`} alt={p} />
+                    <div className="plotLabel">{p}</div>
                   </div>
                 ))
               )}

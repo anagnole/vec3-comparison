@@ -331,6 +331,20 @@ app.get('/plots/ingestion/:filename', (req, res) => {
   res.sendFile(file);
 });
 
+app.delete('/plots/ingestion/:filename', (req, res) => {
+  const filename = req.params.filename;
+  const file = path.join(WEB_INGESTION_PLOTS, filename);
+  if (!fs.existsSync(file)) {
+    return res.status(404).json({ error: 'Plot not found' });
+  }
+  try {
+    fs.unlinkSync(file);
+    res.json({ ok: true, deleted: filename });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to delete', detail: e.message });
+  }
+});
+
 // ============================================================
 // PART 5: QUERY BENCHMARKS
 // ============================================================
@@ -492,6 +506,20 @@ app.get('/plots/queries/:filename', (req, res) => {
     return res.status(404).json({ error: 'Plot not found' });
   }
   res.sendFile(file);
+});
+
+app.delete('/plots/queries/:filename', (req, res) => {
+  const filename = req.params.filename;
+  const file = path.join(WEB_QUERY_PLOTS, filename);
+  if (!fs.existsSync(file)) {
+    return res.status(404).json({ error: 'Plot not found' });
+  }
+  try {
+    fs.unlinkSync(file);
+    res.json({ ok: true, deleted: filename });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to delete', detail: e.message });
+  }
 });
 
 // ============================================================
