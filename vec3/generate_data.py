@@ -12,6 +12,8 @@ class DatasetGenerator:
     def generate_vectors(self, size: int, dim: int, distribution: str = "gaussian") -> np.ndarray:
         if distribution == "gaussian":
             return np.random.randn(size, dim).astype(np.float32)
+        elif distribution == "uniform":
+            return np.random.uniform(-1, 1, size=(size, dim)).astype(np.float32)
         else:
             raise ValueError(f"Unsupported distribution: {distribution}")
 
@@ -61,7 +63,7 @@ if __name__ == "__main__":
     parser.add_argument("--out", type=str, required=True, help="Output directory")
 
     parser.add_argument("--distribution", type=str, default="gaussian",
-                        choices=["gaussian"],
+                        choices=["gaussian", "uniform"],
                         help="Vector distribution type")
 
     parser.add_argument("--classes", nargs="+", default=["A", "B", "C"],

@@ -1,7 +1,3 @@
-# Benchmark Protocol & Configuration
-
-*(Fill out as experimentation progresses)*
-
 ## 1. Environment Details
 | Parameter | Chroma | pgvector |
 |------------|---------|-----------|

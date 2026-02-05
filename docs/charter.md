@@ -65,10 +65,10 @@ This work follows the four main requirements specified in the course brief.
 ## 6. Milestones
 | Milestone | Description | Target |
 |------------|--------------|---------|
-| M1 | Environments ready, smoke tests run | Week 1 |
-| M2 | Data generation & ingestion benchmarks | Week 2 |
-| M3 | Query benchmarks & index tests | Week 3 |
-| M4 | Results visualization & final report | Week 4 |
+| M1 | Environments ready, smoke tests run 
+| M2 | Data generation & ingestion benchmarks 
+| M3 | Query benchmarks & index tests 
+| M4 | Results visualization & final report 
 
 ---
 

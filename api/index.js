@@ -263,7 +263,20 @@ app.get('/plots/ingestion', (req, res) => {
       url: `/plots/ingestion/${name}.png`,
     });
   }
-  res.json({ plots: available });
+  
+  const allFiles = [];
+  if (fs.existsSync(WEB_INGESTION_PLOTS)) {
+    const files = fs.readdirSync(WEB_INGESTION_PLOTS).filter(f => f.endsWith('.png'));
+    for (const f of files) {
+      allFiles.push({
+        name: f.replace('.png', ''),
+        exists: true,
+        url: `/plots/ingestion/${f}`,
+      });
+    }
+  }
+  
+  res.json({ plots: available, allPlots: allFiles });
 });
 
 app.post('/plots/ingestion/:name', (req, res) => {
@@ -427,7 +440,7 @@ const QUERY_PLOTS = [
   'filter_impact',
   'scaling_analysis',
   'p99_latency',
-  'throughput',
+  'throughput_comparison',
   'combined_summary',
 ];
 
@@ -441,7 +454,20 @@ app.get('/plots/queries', (req, res) => {
       url: `/plots/queries/${name}.png`,
     });
   }
-  res.json({ plots: available });
+  
+  const allFiles = [];
+  if (fs.existsSync(WEB_QUERY_PLOTS)) {
+    const files = fs.readdirSync(WEB_QUERY_PLOTS).filter(f => f.endsWith('.png'));
+    for (const f of files) {
+      allFiles.push({
+        name: f.replace('.png', ''),
+        exists: true,
+        url: `/plots/queries/${f}`,
+      });
+    }
+  }
+  
+  res.json({ plots: available, allPlots: allFiles });
 });
 
 app.post('/plots/queries/:name', (req, res) => {

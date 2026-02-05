@@ -95,14 +95,13 @@ export default function App() {
     try {
       const r = await fetch(`${API}/plots/ingestion`)
       const j = await r.json()
-      // Filter to only existing plots, extract just the filename
-      const existing = (j.plots || []).filter(p => p.exists).map(p => `${p.name}.png`)
+      const existing = (j.allPlots || []).map(p => `${p.name}.png`)
       setIngestionPlots(existing)
     } catch {}
     try {
       const r = await fetch(`${API}/plots/queries`)
       const j = await r.json()
-      const existing = (j.plots || []).filter(p => p.exists).map(p => `${p.name}.png`)
+      const existing = (j.allPlots || []).map(p => `${p.name}.png`)
       setQueryPlots(existing)
     } catch {}
   }
@@ -325,22 +324,20 @@ export default function App() {
             </div>
 
             {/* Dataset List */}
-            <div style={{ flex: 1 }}>
+            <div style={{   }}>
               <h4 style={{ marginBottom: 8 }}>Available Datasets</h4>
-              <div style={{ maxHeight: 200, overflow: 'auto', background: 'var(--bg-subtle)', padding: 8, borderRadius: 4 }}>
+              <div style={{ maxHeight: 200, overflow: 'auto', background: 'var(--bg-subtle)', padding: 8, borderRadius: 4}}>
                 {datasets.length === 0 ? (
                   <div className="subtle">(no datasets found)</div>
                 ) : (
-                  <table style={{ width: '100%', fontSize: 13 }}>
+                  <table style={{ fontSize: 13 }}>
                     <thead>
-                      <tr><th>Name</th><th>Vectors</th><th>Dim</th></tr>
+                      <tr><th>Name</th></tr>
                     </thead>
                     <tbody>
                       {datasets.map((d) => (
                         <tr key={d.name}>
                           <td><code>{d.name}</code></td>
-                          <td>{d.count?.toLocaleString() || '?'}</td>
-                          <td>{d.dimensions || '?'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -525,7 +522,7 @@ export default function App() {
           <div style={{ marginBottom: 12 }}>
             <h4>Generate Plots</h4>
             <div className="row wrap">
-              {['latency_comparison', 'recall_comparison', 'latency_vs_recall', 'topk_impact', 'filter_impact', 'scaling_analysis', 'p99_latency', 'throughput', 'combined_summary'].map((name) => (
+              {['latency_comparison', 'recall_comparison', 'latency_vs_recall', 'topk_impact', 'filter_impact', 'scaling_analysis', 'p99_latency', 'throughput_comparison', 'combined_summary'].map((name) => (
                 <button key={name} className="pill" onClick={() => generatePlot('queries', name)} disabled={isRunning}>
                   {name}
                 </button>
