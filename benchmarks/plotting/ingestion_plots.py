@@ -32,9 +32,6 @@ def plot_throughput_comparison(data, dimensions=None, pg_index_type=None, chroma
         title_parts.append(f"pg:{pg_index_type}")
     filter_str = f" ({', '.join(title_parts)})" if title_parts else ""
     
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-    
-    ax1 = axes[0]
     x = np.arange(len(datasets))
     width = 0.35
     
@@ -55,44 +52,51 @@ def plot_throughput_comparison(data, dimensions=None, pg_index_type=None, chroma
             idx_type = p_run.get("index_type", "")
             pg_label = f'pgvector ({idx_type.upper()})' if idx_type else 'pgvector'
     
-    bars1 = ax1.bar(x - width/2, chroma_vps, width, label=f'{chroma_label} (HNSW)', color='#2ecc71')
-    bars2 = ax1.bar(x + width/2, pg_vps, width, label=pg_label, color='#3498db')
+    fig, ax = plt.subplots(figsize=(10, 6))
+    bars1 = ax.bar(x - width/2, chroma_vps, width, label=f'{chroma_label} (HNSW)', color='#2ecc71')
+    bars2 = ax.bar(x + width/2, pg_vps, width, label=pg_label, color='#3498db')
     
-    ax1.set_xlabel('Dataset')
-    ax1.set_ylabel('Vectors per Second')
-    ax1.set_title(f'Ingestion Throughput{filter_str} (batch_size=1000)')
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(datasets)
-    ax1.legend()
-    ax1.grid(axis='y', alpha=0.3)
+    ax.set_xlabel('Dataset')
+    ax.set_ylabel('Vectors per Second')
+    ax.set_title(f'Ingestion Throughput{filter_str} (batch_size=1000)')
+    ax.set_xticks(x)
+    ax.set_xticklabels(datasets)
+    ax.legend()
+    ax.grid(axis='y', alpha=0.3)
     
     for bar, val in zip(bars1, chroma_vps):
         if val > 0:
-            ax1.annotate(f'{val:.0f}', xy=(bar.get_x() + bar.get_width()/2, bar.get_height()),
+            ax.annotate(f'{val:.0f}', xy=(bar.get_x() + bar.get_width()/2, bar.get_height()),
                         ha='center', va='bottom', fontsize=8)
     for bar, val in zip(bars2, pg_vps):
         if val > 0:
-            ax1.annotate(f'{val:.0f}', xy=(bar.get_x() + bar.get_width()/2, bar.get_height()),
+            ax.annotate(f'{val:.0f}', xy=(bar.get_x() + bar.get_width()/2, bar.get_height()),
                         ha='center', va='bottom', fontsize=8)
     
-    ax2 = axes[1]
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "throughput_comparison.png"), dpi=150)
+    plt.close()
+    print("Saved: throughput_comparison.png")
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
     largest = runs[-1] 
     batch_sizes = [r["batch_size"] for r in largest["chroma"]]
     
     chroma_by_batch = [r["vectors_per_sec"] for r in largest["chroma"] if "vectors_per_sec" in r]
     pg_by_batch = [r["vectors_per_sec"] for r in largest["pgvector"] if "vectors_per_sec" in r]
     
-    ax2.plot(batch_sizes[:len(chroma_by_batch)], chroma_by_batch, 'o-', label='Chroma', color='#2ecc71', linewidth=2, markersize=8)
-    ax2.plot(batch_sizes[:len(pg_by_batch)], pg_by_batch, 's-', label='pgvector', color='#3498db', linewidth=2, markersize=8)
-    ax2.set_xlabel('Batch Size')
-    ax2.set_ylabel('Vectors per Second')
-    ax2.set_title(f'Batch Size Impact ({largest["dataset"]}, {largest["vectors"]:,} vectors)')
-    ax2.legend()
-    ax2.grid(alpha=0.3)
+    ax.plot(batch_sizes[:len(chroma_by_batch)], chroma_by_batch, 'o-', label='Chroma', color='#2ecc71', linewidth=2, markersize=8)
+    ax.plot(batch_sizes[:len(pg_by_batch)], pg_by_batch, 's-', label='pgvector', color='#3498db', linewidth=2, markersize=8)
+    ax.set_xlabel('Batch Size')
+    ax.set_ylabel('Vectors per Second')
+    ax.set_title(f'Batch Size Impact ({largest["dataset"]}, {largest["vectors"]:,} vectors)')
+    ax.legend()
+    ax.grid(alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig(os.path.join(PLOTS_DIR, "throughput_comparison.png"), dpi=150)
+    plt.savefig(os.path.join(PLOTS_DIR, "batch_size_impact.png"), dpi=150)
     plt.close()
+    print("Saved: batch_size_impact.png")
     print("Saved: throughput_comparison.png")
 
 
@@ -107,7 +111,6 @@ def plot_storage_comparison(data, dimensions=None, pg_index_type=None, chroma_bu
     
     datasets = [r["dataset"] for r in runs]
     
-    # Build title suffix based on filters
     title_parts = []
     if dimensions:
         title_parts.append(f"{dimensions[0]}d")
@@ -115,7 +118,6 @@ def plot_storage_comparison(data, dimensions=None, pg_index_type=None, chroma_bu
         title_parts.append(f"pg:{pg_index_type}")
     filter_str = f" ({', '.join(title_parts)})" if title_parts else ""
     
-    # Get index label from first run
     pg_index_label = 'index'
     if runs:
         p_run = next((r for r in runs[0]["pgvector"] if r["batch_size"] == 1000), None)
@@ -271,7 +273,8 @@ def plot_time_breakdown(data, dimensions=None, pg_index_type=None, chroma_builti
 
 
 def plot_dimensionality_impact(data):
-    """Plot comparing throughput and storage across different dimensions for same vector count."""
+    """Plot comparing throughput and storage across different dimensions for same vector count.
+    Generates separate plots for each metric."""
     runs = data["runs"]
     
     by_count = {}
@@ -287,11 +290,9 @@ def plot_dimensionality_impact(data):
         print("Skipping dimensionality plot: need same vector count with different dimensions")
         return
     
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-    
     colors = ['#3498db', '#2ecc71', '#e74c3c', '#9b59b6', '#f39c12']
     
-    ax1 = axes[0, 0]
+    fig, ax = plt.subplots(figsize=(10, 6))
     for idx, (count, runs_list) in enumerate(sorted(multi_dim_counts.items())):
         runs_sorted = sorted(runs_list, key=lambda r: r["dimensions"])
         dims = [r["dimensions"] for r in runs_sorted]
@@ -299,16 +300,21 @@ def plot_dimensionality_impact(data):
         for r in runs_sorted:
             c = next((x for x in r["chroma"] if x["batch_size"] == 1000), {})
             vps.append(c.get("vectors_per_sec", 0))
-        ax1.plot(dims, vps, 'o-', label=f'{count//1000}k vectors', color=colors[idx % len(colors)], linewidth=2, markersize=8)
+        ax.plot(dims, vps, 'o-', label=f'{count//1000}k vectors', color=colors[idx % len(colors)], linewidth=2, markersize=8)
     
-    ax1.set_xlabel('Vector Dimensions')
-    ax1.set_ylabel('Vectors per Second')
-    ax1.set_title('Chroma: Throughput vs Dimensionality')
-    ax1.legend()
-    ax1.grid(alpha=0.3)
-    ax1.set_xscale('log', base=2)
+    ax.set_xlabel('Vector Dimensions')
+    ax.set_ylabel('Vectors per Second')
+    ax.set_title('Chroma: Throughput vs Dimensionality')
+    ax.legend()
+    ax.grid(alpha=0.3)
+    ax.set_xscale('log', base=2)
     
-    ax2 = axes[0, 1]
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "dim_chroma_throughput.png"), dpi=150)
+    plt.close()
+    print("Saved: dim_chroma_throughput.png")
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
     for idx, (count, runs_list) in enumerate(sorted(multi_dim_counts.items())):
         runs_sorted = sorted(runs_list, key=lambda r: r["dimensions"])
         dims = [r["dimensions"] for r in runs_sorted]
@@ -316,16 +322,21 @@ def plot_dimensionality_impact(data):
         for r in runs_sorted:
             p = next((x for x in r["pgvector"] if x["batch_size"] == 1000), {})
             vps.append(p.get("vectors_per_sec", 0))
-        ax2.plot(dims, vps, 's-', label=f'{count//1000}k vectors', color=colors[idx % len(colors)], linewidth=2, markersize=8)
+        ax.plot(dims, vps, 's-', label=f'{count//1000}k vectors', color=colors[idx % len(colors)], linewidth=2, markersize=8)
     
-    ax2.set_xlabel('Vector Dimensions')
-    ax2.set_ylabel('Vectors per Second')
-    ax2.set_title('pgvector: Throughput vs Dimensionality')
-    ax2.legend()
-    ax2.grid(alpha=0.3)
-    ax2.set_xscale('log', base=2)
+    ax.set_xlabel('Vector Dimensions')
+    ax.set_ylabel('Vectors per Second')
+    ax.set_title('pgvector: Throughput vs Dimensionality')
+    ax.legend()
+    ax.grid(alpha=0.3)
+    ax.set_xscale('log', base=2)
     
-    ax3 = axes[1, 0]
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "dim_pgvector_throughput.png"), dpi=150)
+    plt.close()
+    print("Saved: dim_pgvector_throughput.png")
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
     width = 0.35
     
     largest_count = max(multi_dim_counts.keys())
@@ -344,19 +355,23 @@ def plot_dimensionality_impact(data):
         pg_storage.append(p.get("storage_mb", 0))
         raw_storage.append(r["vectors"] * r["dimensions"] * 4 / (1024*1024))
     
-    ax3.bar(x - width, raw_storage, width, label='Raw data', color='#95a5a6')
-    ax3.bar(x, chroma_storage, width, label='Chroma', color='#2ecc71')
-    ax3.bar(x + width, pg_storage, width, label='pgvector', color='#3498db')
-    ax3.set_xlabel('Vector Dimensions')
-    ax3.set_ylabel('Storage (MB)')
-    ax3.set_title(f'Storage vs Dimensionality ({largest_count//1000}k vectors)')
-    ax3.set_xticks(x)
-    ax3.set_xticklabels(dims)
-    ax3.legend()
-    ax3.grid(axis='y', alpha=0.3)
+    ax.bar(x - width, raw_storage, width, label='Raw data', color='#95a5a6')
+    ax.bar(x, chroma_storage, width, label='Chroma', color='#2ecc71')
+    ax.bar(x + width, pg_storage, width, label='pgvector', color='#3498db')
+    ax.set_xlabel('Vector Dimensions')
+    ax.set_ylabel('Storage (MB)')
+    ax.set_title(f'Storage vs Dimensionality ({largest_count//1000}k vectors)')
+    ax.set_xticks(x)
+    ax.set_xticklabels(dims)
+    ax.legend()
+    ax.grid(axis='y', alpha=0.3)
     
-    # Plot 4: Chroma vs pgvector ratio by dimension
-    ax4 = axes[1, 1]
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "dim_storage.png"), dpi=150)
+    plt.close()
+    print("Saved: dim_storage.png")
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
     for idx, (count, runs_list) in enumerate(sorted(multi_dim_counts.items())):
         runs_sorted = sorted(runs_list, key=lambda r: r["dimensions"])
         dims = [r["dimensions"] for r in runs_sorted]
@@ -367,20 +382,20 @@ def plot_dimensionality_impact(data):
             c_vps = c.get("vectors_per_sec", 1)
             p_vps = p.get("vectors_per_sec", 1) or 1
             ratios.append(c_vps / p_vps)
-        ax4.plot(dims, ratios, 'o-', label=f'{count//1000}k vectors', color=colors[idx % len(colors)], linewidth=2, markersize=8)
+        ax.plot(dims, ratios, 'o-', label=f'{count//1000}k vectors', color=colors[idx % len(colors)], linewidth=2, markersize=8)
     
-    ax4.axhline(y=1, color='gray', linestyle='--', alpha=0.5)
-    ax4.set_xlabel('Vector Dimensions')
-    ax4.set_ylabel('Chroma / pgvector Throughput Ratio')
-    ax4.set_title('Relative Performance (>1 = Chroma faster)')
-    ax4.legend()
-    ax4.grid(alpha=0.3)
-    ax4.set_xscale('log', base=2)
+    ax.axhline(y=1, color='gray', linestyle='--', alpha=0.5)
+    ax.set_xlabel('Vector Dimensions')
+    ax.set_ylabel('Chroma / pgvector Throughput Ratio')
+    ax.set_title('Relative Performance (>1 = Chroma faster)')
+    ax.legend()
+    ax.grid(alpha=0.3)
+    ax.set_xscale('log', base=2)
     
     plt.tight_layout()
-    plt.savefig(os.path.join(PLOTS_DIR, "dimensionality_impact.png"), dpi=150)
+    plt.savefig(os.path.join(PLOTS_DIR, "dim_performance_ratio.png"), dpi=150)
     plt.close()
-    print("Saved: dimensionality_impact.png")
+    print("Saved: dim_performance_ratio.png")
 
 
 def plot_resource_usage(data, dimensions=None, pg_index_type=None, chroma_builtin=None, pg_lists=None):
@@ -403,8 +418,6 @@ def plot_resource_usage(data, dimensions=None, pg_index_type=None, chroma_builti
         title_parts.append(f"pg:{pg_index_type}")
     filter_str = f" ({', '.join(title_parts)})" if title_parts else ""
     
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-    
     x = np.arange(len(datasets))
     width = 0.35
     
@@ -425,37 +438,44 @@ def plot_resource_usage(data, dimensions=None, pg_index_type=None, chroma_builti
         chroma_avg_cpu.append(c_stats.get("avg_cpu_percent", 0))
         pg_avg_cpu.append(p_stats.get("avg_cpu_percent", 0))
     
-    ax1 = axes[0, 0]
-    bars1 = ax1.bar(x - width/2, chroma_peak_mem, width, label='Chroma', color='#2ecc71')
-    bars2 = ax1.bar(x + width/2, pg_peak_mem, width, label='pgvector', color='#3498db')
-    ax1.axhline(y=4, color='red', linestyle='--', alpha=0.5, label='Memory limit (4GB)')
-    ax1.set_xlabel('Dataset')
-    ax1.set_ylabel('Peak Memory (GB)')
-    ax1.set_title(f'Peak Memory Usage During Ingestion{filter_str} (batch_size=1000)')
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(datasets, rotation=45, ha='right')
-    ax1.legend()
-    ax1.grid(axis='y', alpha=0.3)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.bar(x - width/2, chroma_peak_mem, width, label='Chroma', color='#2ecc71')
+    ax.bar(x + width/2, pg_peak_mem, width, label='pgvector', color='#3498db')
+    ax.axhline(y=4, color='red', linestyle='--', alpha=0.5, label='Memory limit (4GB)')
+    ax.set_xlabel('Dataset')
+    ax.set_ylabel('Peak Memory (GB)')
+    ax.set_title(f'Peak Memory Usage During Ingestion{filter_str} (batch_size=1000)')
+    ax.set_xticks(x)
+    ax.set_xticklabels(datasets, rotation=45, ha='right')
+    ax.legend()
+    ax.grid(axis='y', alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "resource_peak_memory.png"), dpi=150)
+    plt.close()
+    print("Saved: resource_peak_memory.png")
     
-    ax2 = axes[0, 1]
-    ax2.bar(x - width/2, chroma_avg_cpu, width, label='Chroma', color='#2ecc71')
-    ax2.bar(x + width/2, pg_avg_cpu, width, label='pgvector', color='#3498db')
-    ax2.axhline(y=100, color='gray', linestyle='--', alpha=0.5, label='1 CPU core')
-    ax2.axhline(y=600, color='red', linestyle='--', alpha=0.5, label='CPU limit (6 cores)')
-    ax2.set_xlabel('Dataset')
-    ax2.set_ylabel('Average CPU Usage (%)')
-    ax2.set_title(f'Average CPU Usage During Ingestion{filter_str} (batch_size=1000)')
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(datasets, rotation=45, ha='right')
-    ax2.legend()
-    ax2.grid(axis='y', alpha=0.3)
-    
-    ax3 = axes[1, 0]
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.bar(x - width/2, chroma_avg_cpu, width, label='Chroma', color='#2ecc71')
+    ax.bar(x + width/2, pg_avg_cpu, width, label='pgvector', color='#3498db')
+    ax.axhline(y=100, color='gray', linestyle='--', alpha=0.5, label='1 CPU core')
+    ax.axhline(y=600, color='red', linestyle='--', alpha=0.5, label='CPU limit (6 cores)')
+    ax.set_xlabel('Dataset')
+    ax.set_ylabel('Average CPU Usage (%)')
+    ax.set_title(f'Average CPU Usage During Ingestion{filter_str} (batch_size=1000)')
+    ax.set_xticks(x)
+    ax.set_xticklabels(datasets, rotation=45, ha='right')
+    ax.legend()
+    ax.grid(axis='y', alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "resource_avg_cpu.png"), dpi=150)
+    plt.close()
+    print("Saved: resource_avg_cpu.png")
     
     runs_128d = [(r["dataset"], r["vectors"], r) for r in runs if r["dimensions"] == 128]
     runs_128d.sort(key=lambda x: x[1])
     
     if runs_128d:
+        fig, ax = plt.subplots(figsize=(10, 6))
         labels = [r[0] for r in runs_128d]
         vectors = [r[1] for r in runs_128d]
         
@@ -470,18 +490,21 @@ def plot_resource_usage(data, dimensions=None, pg_index_type=None, chroma_builti
             chroma_mem_128.append(c_stats.get("peak_mem_percent", 0) * 4 / 100)
             pg_mem_128.append(p_stats.get("peak_mem_percent", 0) * 4 / 100)
         
-        ax3.plot(vectors, chroma_mem_128, 'o-', label='Chroma', color='#2ecc71', linewidth=2, markersize=8)
-        ax3.plot(vectors, pg_mem_128, 's-', label='pgvector', color='#3498db', linewidth=2, markersize=8)
-        ax3.axhline(y=4, color='red', linestyle='--', alpha=0.5, label='Memory limit')
-        ax3.set_xlabel('Number of Vectors')
-        ax3.set_ylabel('Peak Memory (GB)')
-        ax3.set_title('Memory Scaling with Dataset Size (128d)')
-        ax3.legend()
-        ax3.grid(alpha=0.3)
-        ax3.set_xscale('log')
+        ax.plot(vectors, chroma_mem_128, 'o-', label='Chroma', color='#2ecc71', linewidth=2, markersize=8)
+        ax.plot(vectors, pg_mem_128, 's-', label='pgvector', color='#3498db', linewidth=2, markersize=8)
+        ax.axhline(y=4, color='red', linestyle='--', alpha=0.5, label='Memory limit')
+        ax.set_xlabel('Number of Vectors')
+        ax.set_ylabel('Peak Memory (GB)')
+        ax.set_title('Memory Scaling with Dataset Size (128d)')
+        ax.legend()
+        ax.grid(alpha=0.3)
+        ax.set_xscale('log')
+        plt.tight_layout()
+        plt.savefig(os.path.join(PLOTS_DIR, "resource_memory_scaling.png"), dpi=150)
+        plt.close()
+        print("Saved: resource_memory_scaling.png")
     
-    ax4 = axes[1, 1]
-    
+    fig, ax = plt.subplots(figsize=(10, 6))
     chroma_efficiency = []
     pg_efficiency = []
     
@@ -497,20 +520,19 @@ def plot_resource_usage(data, dimensions=None, pg_index_type=None, chroma_builti
         chroma_efficiency.append(c_vps / c_cpu * 100)  # vectors per 1 CPU core
         pg_efficiency.append(p_vps / p_cpu * 100)
     
-    ax4.bar(x - width/2, chroma_efficiency, width, label='Chroma', color='#2ecc71')
-    ax4.bar(x + width/2, pg_efficiency, width, label='pgvector', color='#3498db')
-    ax4.set_xlabel('Dataset')
-    ax4.set_ylabel('Vectors/sec per CPU core')
-    ax4.set_title('CPU Efficiency (Throughput per CPU core)')
-    ax4.set_xticks(x)
-    ax4.set_xticklabels(datasets, rotation=45, ha='right')
-    ax4.legend()
-    ax4.grid(axis='y', alpha=0.3)
-    
+    ax.bar(x - width/2, chroma_efficiency, width, label='Chroma', color='#2ecc71')
+    ax.bar(x + width/2, pg_efficiency, width, label='pgvector', color='#3498db')
+    ax.set_xlabel('Dataset')
+    ax.set_ylabel('Vectors/sec per CPU core')
+    ax.set_title('CPU Efficiency (Throughput per CPU core)')
+    ax.set_xticks(x)
+    ax.set_xticklabels(datasets, rotation=45, ha='right')
+    ax.legend()
+    ax.grid(axis='y', alpha=0.3)
     plt.tight_layout()
-    plt.savefig(os.path.join(PLOTS_DIR, "resource_usage.png"), dpi=150)
+    plt.savefig(os.path.join(PLOTS_DIR, "resource_cpu_efficiency.png"), dpi=150)
     plt.close()
-    print("Saved: resource_usage.png")
+    print("Saved: resource_cpu_efficiency.png")
 
 
 def print_summary_table(data):
@@ -703,10 +725,6 @@ def print_available_filters(data):
 
 
 def plot_index_storage_breakdown(data, batch_size=1000):
-    """
-    Plot storage breakdown by index type for 100k datasets.
-    Shows table size, index size, and index overhead.
-    """
     runs = data["runs"]
     
     runs_100k = [r for r in runs if r["vectors"] == 100000]
@@ -714,8 +732,6 @@ def plot_index_storage_breakdown(data, batch_size=1000):
     if not runs_100k:
         print("Skipping index storage plot: no 100k datasets found")
         return
-    
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
     
     # Sort by dimensions
     runs_100k = sorted(runs_100k, key=lambda r: r["dimensions"])
@@ -751,73 +767,79 @@ def plot_index_storage_breakdown(data, batch_size=1000):
             pg_index_sizes.append(0)
             pg_total_sizes.append(0)
     
-    # Plot 1: Storage breakdown by component
-    ax1 = axes[0]
     x = np.arange(len(datasets))
     width = 0.2
     
-    ax1.bar(x - 1.5*width, raw_sizes, width, label='Raw vectors', color='#95a5a6')
-    ax1.bar(x - 0.5*width, chroma_sizes, width, label='Chroma (HNSW)', color='#2ecc71')
-    ax1.bar(x + 0.5*width, pg_table_sizes, width, label='pgvector table', color='#3498db')
-    ax1.bar(x + 0.5*width, pg_index_sizes, width, bottom=pg_table_sizes, label='pgvector IVFFlat index', color='#e74c3c')
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.bar(x - 1.5*width, raw_sizes, width, label='Raw vectors', color='#95a5a6')
+    ax.bar(x - 0.5*width, chroma_sizes, width, label='Chroma (HNSW)', color='#2ecc71')
+    ax.bar(x + 0.5*width, pg_table_sizes, width, label='pgvector table', color='#3498db')
+    ax.bar(x + 0.5*width, pg_index_sizes, width, bottom=pg_table_sizes, label='pgvector IVFFlat index', color='#e74c3c')
     
-    ax1.set_xlabel('Dataset (dimensions)')
-    ax1.set_ylabel('Storage (MB)')
-    ax1.set_title(f'Storage Breakdown (100k vectors, batch={batch_size})')
-    ax1.set_xticks(x)
-    ax1.set_xticklabels([f"{d}d" for d in dims])
-    ax1.legend(fontsize=8)
-    ax1.grid(axis='y', alpha=0.3)
-    
-    # Plot 2: Storage overhead ratio (vs raw data)
-    ax2 = axes[1]
-    
-    chroma_overhead = [c/r if r > 0 else 0 for c, r in zip(chroma_sizes, raw_sizes)]
-    pg_overhead = [p/r if r > 0 else 0 for p, r in zip(pg_total_sizes, raw_sizes)]
-    
-    ax2.bar(x - width/2, chroma_overhead, width, label='Chroma (HNSW)', color='#2ecc71')
-    ax2.bar(x + width/2, pg_overhead, width, label='pgvector (IVFFlat)', color='#3498db')
-    ax2.axhline(y=1, color='gray', linestyle='--', alpha=0.5, label='Raw data size')
-    
-    ax2.set_xlabel('Dataset (dimensions)')
-    ax2.set_ylabel('Storage / Raw Data Ratio')
-    ax2.set_title('Storage Overhead vs Raw Data')
-    ax2.set_xticks(x)
-    ax2.set_xticklabels([f"{d}d" for d in dims])
-    ax2.legend(fontsize=8)
-    ax2.grid(axis='y', alpha=0.3)
-    
-    # Add value labels
-    for i, (c, p) in enumerate(zip(chroma_overhead, pg_overhead)):
-        ax2.annotate(f'{c:.2f}x', xy=(i - width/2, c), ha='center', va='bottom', fontsize=8)
-        ax2.annotate(f'{p:.2f}x', xy=(i + width/2, p), ha='center', va='bottom', fontsize=8)
-    
-    # Plot 3: Index overhead as percentage of total
-    ax3 = axes[2]
-    
-    pg_index_pct = [idx/total*100 if total > 0 else 0 for idx, total in zip(pg_index_sizes, pg_total_sizes)]
-    pg_table_pct = [100 - pct for pct in pg_index_pct]
-    
-    ax3.bar(x, pg_table_pct, width*2, label='Table data', color='#3498db')
-    ax3.bar(x, pg_index_pct, width*2, bottom=pg_table_pct, label='IVFFlat index', color='#e74c3c')
-    
-    ax3.set_xlabel('Dataset (dimensions)')
-    ax3.set_ylabel('Percentage of Total Storage')
-    ax3.set_title('pgvector: Index vs Table Storage')
-    ax3.set_xticks(x)
-    ax3.set_xticklabels([f"{d}d" for d in dims])
-    ax3.legend(fontsize=8)
-    ax3.grid(axis='y', alpha=0.3)
-    
-    # Add percentage labels
-    for i, (t_pct, i_pct) in enumerate(zip(pg_table_pct, pg_index_pct)):
-        ax3.annotate(f'{t_pct:.0f}%', xy=(i, t_pct/2), ha='center', va='center', fontsize=9, color='white', fontweight='bold')
-        ax3.annotate(f'{i_pct:.0f}%', xy=(i, t_pct + i_pct/2), ha='center', va='center', fontsize=9, color='white', fontweight='bold')
-    
+    ax.set_xlabel('Dataset (dimensions)')
+    ax.set_ylabel('Storage (MB)')
+    ax.set_title(f'Storage Breakdown (100k vectors, batch={batch_size})')
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"{d}d" for d in dims])
+    ax.legend(fontsize=8)
+    ax.grid(axis='y', alpha=0.3)
     plt.tight_layout()
     plt.savefig(os.path.join(PLOTS_DIR, "index_storage_breakdown.png"), dpi=150)
     plt.close()
     print("Saved: index_storage_breakdown.png")
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    chroma_overhead = [c/r if r > 0 else 0 for c, r in zip(chroma_sizes, raw_sizes)]
+    pg_overhead = [p/r if r > 0 else 0 for p, r in zip(pg_total_sizes, raw_sizes)]
+    
+    ax.bar(x - width/2, chroma_overhead, width, label='Chroma (HNSW)', color='#2ecc71')
+    ax.bar(x + width/2, pg_overhead, width, label='pgvector (IVFFlat)', color='#3498db')
+    ax.axhline(y=1, color='gray', linestyle='--', alpha=0.5, label='Raw data size')
+    
+    ax.set_xlabel('Dataset (dimensions)')
+    ax.set_ylabel('Storage / Raw Data Ratio')
+    ax.set_title('Storage Overhead vs Raw Data')
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"{d}d" for d in dims])
+    ax.legend(fontsize=8)
+    ax.grid(axis='y', alpha=0.3)
+    
+    # Add value labels
+    for i, (c, p) in enumerate(zip(chroma_overhead, pg_overhead)):
+        ax.annotate(f'{c:.2f}x', xy=(i - width/2, c), ha='center', va='bottom', fontsize=8)
+        ax.annotate(f'{p:.2f}x', xy=(i + width/2, p), ha='center', va='bottom', fontsize=8)
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "index_storage_overhead.png"), dpi=150)
+    plt.close()
+    print("Saved: index_storage_overhead.png")
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    pg_index_pct = [idx/total*100 if total > 0 else 0 for idx, total in zip(pg_index_sizes, pg_total_sizes)]
+    pg_table_pct = [100 - pct for pct in pg_index_pct]
+    
+    ax.bar(x, pg_table_pct, width*2, label='Table data', color='#3498db')
+    ax.bar(x, pg_index_pct, width*2, bottom=pg_table_pct, label='IVFFlat index', color='#e74c3c')
+    
+    ax.set_xlabel('Dataset (dimensions)')
+    ax.set_ylabel('Percentage of Total Storage')
+    ax.set_title('pgvector: Index vs Table Storage')
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"{d}d" for d in dims])
+    ax.legend(fontsize=8)
+    ax.grid(axis='y', alpha=0.3)
+    
+    # Add percentage labels
+    for i, (t_pct, i_pct) in enumerate(zip(pg_table_pct, pg_index_pct)):
+        ax.annotate(f'{t_pct:.0f}%', xy=(i, t_pct/2), ha='center', va='center', fontsize=9, color='white', fontweight='bold')
+        ax.annotate(f'{i_pct:.0f}%', xy=(i, t_pct + i_pct/2), ha='center', va='center', fontsize=9, color='white', fontweight='bold')
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "index_table_vs_index.png"), dpi=150)
+    plt.close()
+    print("Saved: index_table_vs_index.png")
 
 
 def plot_index_build_time(data, batch_size=1000):
@@ -904,14 +926,19 @@ def plot_index_build_time(data, batch_size=1000):
         print("Skipping index build time plot: no configurations found")
         return
     
-    # Create figure with 4 subplots
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    
     colors_pg = {'hnsw': '#e74c3c', 'ivfflat': '#3498db'}
     colors_chroma = '#2ecc71'
     
-    # --- Plot 1: Index Build Time by Configuration (scatter/line) ---
-    ax1 = axes[0, 0]
+    from matplotlib.lines import Line2D
+    legend_elements = [
+        Line2D([0], [0], marker='o', color='w', markerfacecolor='gray', markersize=10, label='50k vectors'),
+        Line2D([0], [0], marker='s', color='w', markerfacecolor='gray', markersize=10, label='100k vectors'),
+        Line2D([0], [0], marker='o', color='w', markerfacecolor=colors_chroma, markersize=10, label='Chroma'),
+        Line2D([0], [0], marker='o', color='w', markerfacecolor=colors_pg['hnsw'], markersize=10, label='pgvector HNSW'),
+        Line2D([0], [0], marker='o', color='w', markerfacecolor=colors_pg['ivfflat'], markersize=10, label='pgvector IVFFlat'),
+    ]
+    
+    fig, ax = plt.subplots(figsize=(10, 8))
     
     # Group by size
     for size in [50000, 100000]:
@@ -930,36 +957,29 @@ def plot_index_build_time(data, batch_size=1000):
         
         for i, (t, label, color) in enumerate(zip(times, labels, colors)):
             marker = 'o' if size == 50000 else 's'
-            ax1.scatter(t, i, c=color, s=150, marker=marker, edgecolors='black', linewidths=0.5, zorder=3)
-            ax1.annotate(f'{t:.1f}s', xy=(t, i), xytext=(5, 0), textcoords='offset points', 
+            ax.scatter(t, i, c=color, s=150, marker=marker, edgecolors='black', linewidths=0.5, zorder=3)
+            ax.annotate(f'{t:.1f}s', xy=(t, i), xytext=(5, 0), textcoords='offset points', 
                         fontsize=8, va='center')
         
         # Connect points for same size
-        ax1.plot(times, y_pos, '--', alpha=0.3, color='gray')
+        ax.plot(times, y_pos, '--', alpha=0.3, color='gray')
     
-    # Set labels from 50k configs (they should be similar)
     size_50k = [c for c in configs if c["size"] == 50000]
     size_50k.sort(key=lambda x: x["index_time"])
-    ax1.set_yticks(range(len(size_50k)))
-    ax1.set_yticklabels([c["label"] for c in size_50k], fontsize=9)
-    ax1.set_xlabel('Index Build Time (seconds)', fontsize=10)
-    ax1.set_title('Index Build Time Comparison (128d vectors)', fontsize=11)
-    ax1.set_xscale('log')
-    ax1.grid(axis='x', alpha=0.3)
+    ax.set_yticks(range(len(size_50k)))
+    ax.set_yticklabels([c["label"] for c in size_50k], fontsize=9)
+    ax.set_xlabel('Index Build Time (seconds)', fontsize=10)
+    ax.set_title('Index Build Time Comparison (128d vectors)', fontsize=11)
+    ax.set_xscale('log')
+    ax.grid(axis='x', alpha=0.3)
+    ax.legend(handles=legend_elements, loc='lower right', fontsize=8)
     
-    # Legend for sizes
-    from matplotlib.lines import Line2D
-    legend_elements = [
-        Line2D([0], [0], marker='o', color='w', markerfacecolor='gray', markersize=10, label='50k vectors'),
-        Line2D([0], [0], marker='s', color='w', markerfacecolor='gray', markersize=10, label='100k vectors'),
-        Line2D([0], [0], marker='o', color='w', markerfacecolor=colors_chroma, markersize=10, label='Chroma'),
-        Line2D([0], [0], marker='o', color='w', markerfacecolor=colors_pg['hnsw'], markersize=10, label='pgvector HNSW'),
-        Line2D([0], [0], marker='o', color='w', markerfacecolor=colors_pg['ivfflat'], markersize=10, label='pgvector IVFFlat'),
-    ]
-    ax1.legend(handles=legend_elements, loc='lower right', fontsize=8)
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "index_build_time.png"), dpi=150)
+    plt.close()
+    print("Saved: index_build_time.png")
     
-    # --- Plot 2: Storage Comparison (horizontal lollipop) ---
-    ax2 = axes[0, 1]
+    fig, ax = plt.subplots(figsize=(10, 8))
     
     # Use 50k data for cleaner comparison
     size_50k = [c for c in configs if c["size"] == 50000]
@@ -972,27 +992,32 @@ def plot_index_build_time(data, batch_size=1000):
     y_pos = np.arange(len(labels))
     
     # Lollipop chart
-    ax2.hlines(y=y_pos, xmin=0, xmax=storage, color=colors, alpha=0.7, linewidth=2)
-    ax2.scatter(storage, y_pos, c=colors, s=150, edgecolors='black', linewidths=0.5, zorder=3)
+    ax.hlines(y=y_pos, xmin=0, xmax=storage, color=colors, alpha=0.7, linewidth=2)
+    ax.scatter(storage, y_pos, c=colors, s=150, edgecolors='black', linewidths=0.5, zorder=3)
     
     # Add raw data reference line
     raw_size = 50000 * 128 * 4 / (1024*1024)
-    ax2.axvline(x=raw_size, color='gray', linestyle='--', alpha=0.5, label=f'Raw data ({raw_size:.1f} MB)')
+    ax.axvline(x=raw_size, color='gray', linestyle='--', alpha=0.5, label=f'Raw data ({raw_size:.1f} MB)')
     
     for i, s in enumerate(storage):
         overhead = (s / raw_size - 1) * 100
-        ax2.annotate(f'{s:.1f} MB (+{overhead:.0f}%)', xy=(s, i), xytext=(5, 0), 
+        ax.annotate(f'{s:.1f} MB (+{overhead:.0f}%)', xy=(s, i), xytext=(5, 0), 
                     textcoords='offset points', fontsize=8, va='center')
     
-    ax2.set_yticks(y_pos)
-    ax2.set_yticklabels(labels, fontsize=9)
-    ax2.set_xlabel('Storage (MB)', fontsize=10)
-    ax2.set_title('Storage Comparison (50k × 128d vectors)', fontsize=11)
-    ax2.legend(loc='lower right', fontsize=8)
-    ax2.grid(axis='x', alpha=0.3)
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(labels, fontsize=9)
+    ax.set_xlabel('Storage (MB)', fontsize=10)
+    ax.set_title('Storage Comparison (50k × 128d vectors)', fontsize=11)
+    ax.legend(loc='lower right', fontsize=8)
+    ax.grid(axis='x', alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "index_storage_comparison.png"), dpi=150)
+    plt.close()
+    print("Saved: index_storage_comparison.png")
     
     # --- Plot 3: Time vs Storage Trade-off (scatter) ---
-    ax3 = axes[1, 0]
+    fig, ax = plt.subplots(figsize=(10, 8))
     
     for size in [50000, 100000]:
         size_label = f"{size//1000}k"
@@ -1001,23 +1026,27 @@ def plot_index_build_time(data, batch_size=1000):
         for c in size_configs:
             color = colors_chroma if c["db"] == "chroma" else colors_pg.get(c["index_type"], "gray")
             marker = 'o' if size == 50000 else 's'
-            ax3.scatter(c["index_time"], c["storage_mb"], c=color, s=150, marker=marker,
+            ax.scatter(c["index_time"], c["storage_mb"], c=color, s=150, marker=marker,
                        edgecolors='black', linewidths=0.5, alpha=0.8, zorder=3)
             
             # Label only some points to avoid clutter
             if c["index_time"] > 5 or c["storage_mb"] > 70:
-                ax3.annotate(c["params_str"], xy=(c["index_time"], c["storage_mb"]),
+                ax.annotate(c["params_str"], xy=(c["index_time"], c["storage_mb"]),
                            xytext=(5, 5), textcoords='offset points', fontsize=7)
     
-    ax3.set_xlabel('Index Build Time (seconds)', fontsize=10)
-    ax3.set_ylabel('Total Storage (MB)', fontsize=10)
-    ax3.set_title('Time vs Storage Trade-off', fontsize=11)
-    ax3.set_xscale('log')
-    ax3.grid(alpha=0.3)
-    ax3.legend(handles=legend_elements[:5], loc='upper left', fontsize=8)
+    ax.set_xlabel('Index Build Time (seconds)', fontsize=10)
+    ax.set_ylabel('Total Storage (MB)', fontsize=10)
+    ax.set_title('Time vs Storage Trade-off', fontsize=11)
+    ax.set_xscale('log')
+    ax.grid(alpha=0.3)
+    ax.legend(handles=legend_elements[:5], loc='upper left', fontsize=8)
     
-    # --- Plot 4: Index Build Time as % of Total (for pgvector only) ---
-    ax4 = axes[1, 1]
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "index_time_storage_tradeoff.png"), dpi=150)
+    plt.close()
+    print("Saved: index_time_storage_tradeoff.png")
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
     
     # Only pgvector has meaningful separate index time
     pg_configs = [c for c in configs if c["db"] == "pgvector" and c["size"] == 50000]
@@ -1031,24 +1060,24 @@ def plot_index_build_time(data, batch_size=1000):
     y_pos = np.arange(len(labels))
     
     # Horizontal lollipop
-    ax4.hlines(y=y_pos, xmin=0, xmax=pcts, color=colors, alpha=0.7, linewidth=2)
-    ax4.scatter(pcts, y_pos, c=colors, s=150, edgecolors='black', linewidths=0.5, zorder=3)
+    ax.hlines(y=y_pos, xmin=0, xmax=pcts, color=colors, alpha=0.7, linewidth=2)
+    ax.scatter(pcts, y_pos, c=colors, s=150, edgecolors='black', linewidths=0.5, zorder=3)
     
     for i, (pct, t) in enumerate(zip(pcts, times)):
-        ax4.annotate(f'{pct:.1f}% ({t:.1f}s)', xy=(pct, i), xytext=(5, 0),
+        ax.annotate(f'{pct:.1f}% ({t:.1f}s)', xy=(pct, i), xytext=(5, 0),
                     textcoords='offset points', fontsize=9, va='center')
     
-    ax4.set_yticks(y_pos)
-    ax4.set_yticklabels(labels, fontsize=9)
-    ax4.set_xlabel('Index Build Time (% of Total Ingestion)', fontsize=10)
-    ax4.set_title('pgvector: Index Build as % of Total (50k × 128d)', fontsize=11)
-    ax4.set_xlim(0, 105)
-    ax4.grid(axis='x', alpha=0.3)
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(labels, fontsize=9)
+    ax.set_xlabel('Index Build Time (% of Total Ingestion)', fontsize=10)
+    ax.set_title('pgvector: Index Build as % of Total (50k × 128d)', fontsize=11)
+    ax.set_xlim(0, 105)
+    ax.grid(axis='x', alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig(os.path.join(PLOTS_DIR, "index_build_time.png"), dpi=150)
+    plt.savefig(os.path.join(PLOTS_DIR, "index_build_percentage.png"), dpi=150)
     plt.close()
-    print("Saved: index_build_time.png")
+    print("Saved: index_build_percentage.png")
 
 
 
@@ -1061,7 +1090,6 @@ def main():
     
     print_available_filters(data)
     
-    plot_memory_usage(data)
     plot_dimensionality_impact(filter_data(data, pg_index_type="ivfflat", pg_lists=100))
     plot_index_storage_breakdown(data, batch_size=1000)
     plot_index_build_time(data, batch_size=1000)
@@ -1071,6 +1099,8 @@ def main():
     plot_time_breakdown(data, dimensions=[128], pg_index_type='ivfflat', pg_lists=100, chroma_builtin=True)
     plot_storage_comparison(data, dimensions=[128], pg_index_type='ivfflat', pg_lists=100, chroma_builtin=True)
     plot_resource_usage(data, dimensions=[128], pg_index_type='ivfflat', pg_lists=100, chroma_builtin=True)
+    plot_memory_usage(filter_data(data, pg_index_type="ivfflat", pg_lists=100, dimensions=[128]))
+
 
     
     print(f"\nAll plots saved to: {PLOTS_DIR}/")

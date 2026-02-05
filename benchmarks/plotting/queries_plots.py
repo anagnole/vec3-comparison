@@ -94,15 +94,9 @@ def get_metric(run, db, top_k, metric_path):
     return val
 
 
-# =============================================================================
-# PLOT FUNCTIONS
-# =============================================================================
 
 def plot_latency_comparison(data):
-    """
-    Plot latency comparison between Chroma and pgvector.
-    Side-by-side bars for each dataset, nofilter mode only.
-    """
+
     runs = sort_runs_by_size([r for r in data["runs"] if r["mode"] == "nofilter"])
     if not runs:
         print("Skipping latency comparison: no nofilter runs")
@@ -118,11 +112,11 @@ def plot_latency_comparison(data):
     runs = unique_runs
     
     datasets = [r["dataset"] for r in runs]
-    
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
     top_ks = [10, 50, 100]
     
-    for ax, top_k in zip(axes, top_ks):
+    for top_k in top_ks:
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
         x = np.arange(len(datasets))
         width = 0.35
         
@@ -140,30 +134,30 @@ def plot_latency_comparison(data):
         for bar, val in zip(bars1, chroma_lat):
             if val > 0:
                 ax.annotate(f'{val:.2f}', xy=(bar.get_x() + bar.get_width()/2, bar.get_height()),
-                           ha='center', va='bottom', fontsize=7)
+                           ha='center', va='bottom', fontsize=9)
         for bar, val in zip(bars2, pg_lat):
             if val > 0:
                 ax.annotate(f'{val:.2f}', xy=(bar.get_x() + bar.get_width()/2, bar.get_height()),
-                           ha='center', va='bottom', fontsize=7)
+                           ha='center', va='bottom', fontsize=9)
         
         ax.set_xlabel('Dataset')
         ax.set_ylabel('Mean Latency (ms)')
-        ax.set_title(f'Query Latency (top_k={top_k})')
+        ax.set_title(f'Query Latency Comparison (top_k={top_k})')
         ax.set_xticks(x)
         ax.set_xticklabels(datasets)
         ax.legend()
         ax.grid(axis='y', alpha=0.3)
-    
-    plt.tight_layout()
-    plt.savefig(os.path.join(PLOTS_DIR, "latency_comparison.png"), dpi=150)
-    plt.close()
-    print("Saved: latency_comparison.png")
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(PLOTS_DIR, f"latency_k{top_k}.png"), dpi=150)
+        plt.close()
+        print(f"Saved: latency_k{top_k}.png")
 
 
 def plot_recall_comparison(data):
     """
     Plot recall comparison between Chroma and pgvector.
-    Side-by-side bars for each dataset, nofilter mode only.
+    Generates separate plots for each top_k value.
     """
     runs = sort_runs_by_size([r for r in data["runs"] if r["mode"] == "nofilter"])
     if not runs:
@@ -180,11 +174,11 @@ def plot_recall_comparison(data):
     runs = unique_runs
     
     datasets = [r["dataset"] for r in runs]
-    
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
     top_ks = [10, 50, 100]
     
-    for ax, top_k in zip(axes, top_ks):
+    for top_k in top_ks:
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
         x = np.arange(len(datasets))
         width = 0.35
         
@@ -198,26 +192,26 @@ def plot_recall_comparison(data):
         for bar, val in zip(bars1, chroma_recall):
             if val > 0:
                 ax.annotate(f'{val:.2f}', xy=(bar.get_x() + bar.get_width()/2, bar.get_height()),
-                           ha='center', va='bottom', fontsize=8)
+                           ha='center', va='bottom', fontsize=9)
         for bar, val in zip(bars2, pg_recall):
             if val > 0:
                 ax.annotate(f'{val:.2f}', xy=(bar.get_x() + bar.get_width()/2, bar.get_height()),
-                           ha='center', va='bottom', fontsize=8)
+                           ha='center', va='bottom', fontsize=9)
         
         ax.set_xlabel('Dataset')
         ax.set_ylabel('Recall@k')
-        ax.set_title(f'Query Recall (top_k={top_k})')
+        ax.set_title(f'Query Recall Comparison (top_k={top_k})')
         ax.set_xticks(x)
         ax.set_xticklabels(datasets)
         ax.set_ylim(0, 1.1)
         ax.axhline(y=1.0, color='gray', linestyle='--', alpha=0.3)
         ax.legend()
         ax.grid(axis='y', alpha=0.3)
-    
-    plt.tight_layout()
-    plt.savefig(os.path.join(PLOTS_DIR, "recall_comparison.png"), dpi=150)
-    plt.close()
-    print("Saved: recall_comparison.png")
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(PLOTS_DIR, f"recall_k{top_k}.png"), dpi=150)
+        plt.close()
+        print(f"Saved: recall_k{top_k}.png")
 
 
 def plot_latency_vs_recall(data):
@@ -279,9 +273,6 @@ def plot_latency_vs_recall(data):
 
 
 def plot_topk_impact(data):
-    """
-    Line plots showing how top_k affects latency and recall for each dataset.
-    """
     runs = sort_runs_by_size([r for r in data["runs"] if r["mode"] == "nofilter"])
     if not runs:
         print("Skipping top-k impact: no nofilter runs")
@@ -296,70 +287,77 @@ def plot_topk_impact(data):
             unique_runs.append(r)
     runs = unique_runs
     
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     colors = plt.cm.viridis(np.linspace(0, 0.8, len(runs)))
     
-    # Chroma latency
-    ax1 = axes[0, 0]
+    fig, ax = plt.subplots(figsize=(10, 6))
     for i, run in enumerate(runs):
         top_ks = [e["top_k"] for e in run["chroma"]]
         lats = [e["latency"]["mean"] * 1000 for e in run["chroma"]]
-        ax1.plot(top_ks, lats, 'o-', label=run["dataset"], color=colors[i], linewidth=2, markersize=8)
-    ax1.set_xlabel('Top-K')
-    ax1.set_ylabel('Mean Latency (ms)')
-    ax1.set_title('Chroma: Latency vs Top-K')
-    ax1.legend()
-    ax1.grid(alpha=0.3)
+        ax.plot(top_ks, lats, 'o-', label=run["dataset"], color=colors[i], linewidth=2, markersize=8)
+    ax.set_xlabel('Top-K')
+    ax.set_ylabel('Mean Latency (ms)')
+    ax.set_title('Chroma: Latency vs Top-K')
+    ax.legend()
+    ax.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "topk_chroma_latency.png"), dpi=150)
+    plt.close()
+    print("Saved: topk_chroma_latency.png")
     
-    # pgvector latency
-    ax2 = axes[0, 1]
+    fig, ax = plt.subplots(figsize=(10, 6))
     for i, run in enumerate(runs):
         top_ks = [e["top_k"] for e in run["pgvector"]]
         lats = [e["latency"]["mean"] * 1000 for e in run["pgvector"]]
-        ax2.plot(top_ks, lats, 's-', label=run["dataset"], color=colors[i], linewidth=2, markersize=8)
-    ax2.set_xlabel('Top-K')
-    ax2.set_ylabel('Mean Latency (ms)')
-    ax2.set_title('pgvector: Latency vs Top-K')
-    ax2.legend()
-    ax2.grid(alpha=0.3)
+        ax.plot(top_ks, lats, 's-', label=run["dataset"], color=colors[i], linewidth=2, markersize=8)
+    ax.set_xlabel('Top-K')
+    ax.set_ylabel('Mean Latency (ms)')
+    ax.set_title('pgvector: Latency vs Top-K')
+    ax.legend()
+    ax.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "topk_pgvector_latency.png"), dpi=150)
+    plt.close()
+    print("Saved: topk_pgvector_latency.png")
     
-    # Chroma recall
-    ax3 = axes[1, 0]
+    fig, ax = plt.subplots(figsize=(10, 6))
     for i, run in enumerate(runs):
         top_ks = [e["top_k"] for e in run["chroma"]]
         recs = [e.get("recall", {}).get("recall_mean", 0) for e in run["chroma"]]
-        ax3.plot(top_ks, recs, 'o-', label=run["dataset"], color=colors[i], linewidth=2, markersize=8)
-    ax3.set_xlabel('Top-K')
-    ax3.set_ylabel('Recall@k')
-    ax3.set_title('Chroma: Recall vs Top-K')
-    ax3.set_ylim(0, 1.1)
-    ax3.axhline(y=1.0, color='gray', linestyle='--', alpha=0.3)
-    ax3.legend()
-    ax3.grid(alpha=0.3)
+        ax.plot(top_ks, recs, 'o-', label=run["dataset"], color=colors[i], linewidth=2, markersize=8)
+    ax.set_xlabel('Top-K')
+    ax.set_ylabel('Recall@k')
+    ax.set_title('Chroma: Recall vs Top-K')
+    ax.set_ylim(0, 1.1)
+    ax.axhline(y=1.0, color='gray', linestyle='--', alpha=0.3)
+    ax.legend()
+    ax.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "topk_chroma_recall.png"), dpi=150)
+    plt.close()
+    print("Saved: topk_chroma_recall.png")
     
-    # pgvector recall
-    ax4 = axes[1, 1]
+    fig, ax = plt.subplots(figsize=(10, 6))
     for i, run in enumerate(runs):
         top_ks = [e["top_k"] for e in run["pgvector"]]
         recs = [e.get("recall", {}).get("recall_mean", 0) for e in run["pgvector"]]
-        ax4.plot(top_ks, recs, 's-', label=run["dataset"], color=colors[i], linewidth=2, markersize=8)
-    ax4.set_xlabel('Top-K')
-    ax4.set_ylabel('Recall@k')
-    ax4.set_title('pgvector: Recall vs Top-K')
-    ax4.set_ylim(0, 1.1)
-    ax4.axhline(y=1.0, color='gray', linestyle='--', alpha=0.3)
-    ax4.legend()
-    ax4.grid(alpha=0.3)
-    
+        ax.plot(top_ks, recs, 's-', label=run["dataset"], color=colors[i], linewidth=2, markersize=8)
+    ax.set_xlabel('Top-K')
+    ax.set_ylabel('Recall@k')
+    ax.set_title('pgvector: Recall vs Top-K')
+    ax.set_ylim(0, 1.1)
+    ax.axhline(y=1.0, color='gray', linestyle='--', alpha=0.3)
+    ax.legend()
+    ax.grid(alpha=0.3)
     plt.tight_layout()
-    plt.savefig(os.path.join(PLOTS_DIR, "topk_impact.png"), dpi=150)
+    plt.savefig(os.path.join(PLOTS_DIR, "topk_pgvector_recall.png"), dpi=150)
     plt.close()
-    print("Saved: topk_impact.png")
+    print("Saved: topk_pgvector_recall.png")
 
 
 def plot_filter_impact(data):
     """
     Compare nofilter vs filter mode for latency and recall.
+    Generates separate plots for each metric.
     """
     runs = data["runs"]
     
@@ -380,7 +378,6 @@ def plot_filter_impact(data):
     size_map = {r["dataset"]: r["vectors"] for r in runs}
     datasets_with_both.sort(key=lambda d: size_map.get(d, 0))
     
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     x = np.arange(len(datasets_with_both))
     width = 0.2
     top_k = 10  # Use top_k=10 for comparison
@@ -405,78 +402,82 @@ def plot_filter_impact(data):
         pg_nf_rec.append(get_metric(nf, 'pgvector', top_k, ('recall', 'recall_mean')) or 0)
         pg_f_rec.append(get_metric(f, 'pgvector', top_k, ('recall', 'recall_mean')) or 0)
     
-    # Plot 1: Latency comparison
-    ax1 = axes[0, 0]
-    ax1.bar(x - 1.5*width, chroma_nf_lat, width, label='Chroma (nofilter)', color=COLORS['chroma'])
-    ax1.bar(x - 0.5*width, chroma_f_lat, width, label='Chroma (filter)', color=COLORS['chroma_dark'])
-    ax1.bar(x + 0.5*width, pg_nf_lat, width, label='pgvector (nofilter)', color=COLORS['pgvector'])
-    ax1.bar(x + 1.5*width, pg_f_lat, width, label='pgvector (filter)', color=COLORS['pgvector_dark'])
-    ax1.set_xlabel('Dataset')
-    ax1.set_ylabel('Mean Latency (ms)')
-    ax1.set_title(f'Filter Impact on Latency (top_k={top_k})')
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(datasets_with_both)
-    ax1.legend(fontsize=8)
-    ax1.grid(axis='y', alpha=0.3)
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.bar(x - 1.5*width, chroma_nf_lat, width, label='Chroma (nofilter)', color=COLORS['chroma'])
+    ax.bar(x - 0.5*width, chroma_f_lat, width, label='Chroma (filter)', color=COLORS['chroma_dark'])
+    ax.bar(x + 0.5*width, pg_nf_lat, width, label='pgvector (nofilter)', color=COLORS['pgvector'])
+    ax.bar(x + 1.5*width, pg_f_lat, width, label='pgvector (filter)', color=COLORS['pgvector_dark'])
+    ax.set_xlabel('Dataset')
+    ax.set_ylabel('Mean Latency (ms)')
+    ax.set_title(f'Filter Impact on Latency (top_k={top_k})')
+    ax.set_xticks(x)
+    ax.set_xticklabels(datasets_with_both)
+    ax.legend()
+    ax.grid(axis='y', alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "filter_latency.png"), dpi=150)
+    plt.close()
+    print("Saved: filter_latency.png")
     
-    # Plot 2: Latency overhead ratio
-    ax2 = axes[0, 1]
+    fig, ax = plt.subplots(figsize=(10, 6))
     chroma_ratio = [f/nf if nf > 0 else 0 for nf, f in zip(chroma_nf_lat, chroma_f_lat)]
     pg_ratio = [f/nf if nf > 0 else 0 for nf, f in zip(pg_nf_lat, pg_f_lat)]
     
-    ax2.bar(x - width/2, chroma_ratio, width, label='Chroma', color=COLORS['chroma'])
-    ax2.bar(x + width/2, pg_ratio, width, label='pgvector', color=COLORS['pgvector'])
-    ax2.axhline(y=1, color='gray', linestyle='--', alpha=0.5)
-    ax2.set_xlabel('Dataset')
-    ax2.set_ylabel('Latency Ratio (filter / nofilter)')
-    ax2.set_title('Filter Overhead (>1 = filter is slower)')
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(datasets_with_both)
-    ax2.legend()
-    ax2.grid(axis='y', alpha=0.3)
+    ax.bar(x - width/2, chroma_ratio, width*1.5, label='Chroma', color=COLORS['chroma'])
+    ax.bar(x + width/2, pg_ratio, width*1.5, label='pgvector', color=COLORS['pgvector'])
+    ax.axhline(y=1, color='gray', linestyle='--', alpha=0.5)
+    ax.set_xlabel('Dataset')
+    ax.set_ylabel('Latency Ratio (filter / nofilter)')
+    ax.set_title('Filter Overhead (>1 = filter is slower)')
+    ax.set_xticks(x)
+    ax.set_xticklabels(datasets_with_both)
+    ax.legend()
+    ax.grid(axis='y', alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "filter_overhead.png"), dpi=150)
+    plt.close()
+    print("Saved: filter_overhead.png")
     
-    # Plot 3: Recall comparison
-    ax3 = axes[1, 0]
-    ax3.bar(x - 1.5*width, chroma_nf_rec, width, label='Chroma (nofilter)', color=COLORS['chroma'])
-    ax3.bar(x - 0.5*width, chroma_f_rec, width, label='Chroma (filter)', color=COLORS['chroma_dark'])
-    ax3.bar(x + 0.5*width, pg_nf_rec, width, label='pgvector (nofilter)', color=COLORS['pgvector'])
-    ax3.bar(x + 1.5*width, pg_f_rec, width, label='pgvector (filter)', color=COLORS['pgvector_dark'])
-    ax3.set_xlabel('Dataset')
-    ax3.set_ylabel('Recall@k')
-    ax3.set_title(f'Filter Impact on Recall (top_k={top_k})')
-    ax3.set_xticks(x)
-    ax3.set_xticklabels(datasets_with_both)
-    ax3.set_ylim(0, 1.1)
-    ax3.legend(fontsize=8)
-    ax3.grid(axis='y', alpha=0.3)
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.bar(x - 1.5*width, chroma_nf_rec, width, label='Chroma (nofilter)', color=COLORS['chroma'])
+    ax.bar(x - 0.5*width, chroma_f_rec, width, label='Chroma (filter)', color=COLORS['chroma_dark'])
+    ax.bar(x + 0.5*width, pg_nf_rec, width, label='pgvector (nofilter)', color=COLORS['pgvector'])
+    ax.bar(x + 1.5*width, pg_f_rec, width, label='pgvector (filter)', color=COLORS['pgvector_dark'])
+    ax.set_xlabel('Dataset')
+    ax.set_ylabel('Recall@k')
+    ax.set_title(f'Filter Impact on Recall (top_k={top_k})')
+    ax.set_xticks(x)
+    ax.set_xticklabels(datasets_with_both)
+    ax.set_ylim(0, 1.1)
+    ax.legend()
+    ax.grid(axis='y', alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "filter_recall.png"), dpi=150)
+    plt.close()
+    print("Saved: filter_recall.png")
     
     # Plot 4: Recall drop
-    ax4 = axes[1, 1]
+    fig, ax = plt.subplots(figsize=(10, 6))
     chroma_drop = [nf - f for nf, f in zip(chroma_nf_rec, chroma_f_rec)]
     pg_drop = [nf - f for nf, f in zip(pg_nf_rec, pg_f_rec)]
     
-    ax4.bar(x - width/2, chroma_drop, width, label='Chroma', color=COLORS['chroma'])
-    ax4.bar(x + width/2, pg_drop, width, label='pgvector', color=COLORS['pgvector'])
-    ax4.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
-    ax4.set_xlabel('Dataset')
-    ax4.set_ylabel('Recall Drop (nofilter - filter)')
-    ax4.set_title('Recall Degradation from Filtering (>0 = filter hurts recall)')
-    ax4.set_xticks(x)
-    ax4.set_xticklabels(datasets_with_both)
-    ax4.legend()
-    ax4.grid(axis='y', alpha=0.3)
-    
+    ax.bar(x - width/2, chroma_drop, width*1.5, label='Chroma', color=COLORS['chroma'])
+    ax.bar(x + width/2, pg_drop, width*1.5, label='pgvector', color=COLORS['pgvector'])
+    ax.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
+    ax.set_xlabel('Dataset')
+    ax.set_ylabel('Recall Drop (nofilter - filter)')
+    ax.set_title('Recall Degradation from Filtering (>0 = filter hurts recall)')
+    ax.set_xticks(x)
+    ax.set_xticklabels(datasets_with_both)
+    ax.legend()
+    ax.grid(axis='y', alpha=0.3)
     plt.tight_layout()
-    plt.savefig(os.path.join(PLOTS_DIR, "filter_impact.png"), dpi=150)
+    plt.savefig(os.path.join(PLOTS_DIR, "filter_recall_drop.png"), dpi=150)
     plt.close()
-    print("Saved: filter_impact.png")
+    print("Saved: filter_recall_drop.png")
 
 
 def plot_scaling_analysis(data):
-    """
-    Show how latency and recall scale with dataset size.
-    Line plots connecting datasets of increasing size.
-    """
     runs = sort_runs_by_size([r for r in data["runs"] if r["mode"] == "nofilter"])
     if len(runs) < 2:
         print("Skipping scaling analysis: need at least 2 datasets")
@@ -491,53 +492,54 @@ def plot_scaling_analysis(data):
             unique_runs.append(r)
     runs = unique_runs
     
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     top_k = 10
-    
     sizes = [r["vectors"] for r in runs]
     labels = [r["dataset"] for r in runs]
     
-    # Latency scaling
-    ax1 = axes[0]
+    fig, ax = plt.subplots(figsize=(10, 6))
     chroma_lat = [(get_metric(r, 'chroma', top_k, ('latency', 'mean')) or 0) * 1000 for r in runs]
     pg_lat = [(get_metric(r, 'pgvector', top_k, ('latency', 'mean')) or 0) * 1000 for r in runs]
     
-    ax1.plot(sizes, chroma_lat, 'o-', label='Chroma', color=COLORS['chroma'], linewidth=2, markersize=10)
-    ax1.plot(sizes, pg_lat, 's-', label='pgvector', color=COLORS['pgvector'], linewidth=2, markersize=10)
+    ax.plot(sizes, chroma_lat, 'o-', label='Chroma', color=COLORS['chroma'], linewidth=2, markersize=10)
+    ax.plot(sizes, pg_lat, 's-', label='pgvector', color=COLORS['pgvector'], linewidth=2, markersize=10)
     
-    ax1.set_xlabel('Number of Vectors')
-    ax1.set_ylabel('Mean Latency (ms)')
-    ax1.set_title(f'Latency Scaling (top_k={top_k}, nofilter)')
-    ax1.set_xscale('log')
-    ax1.legend()
-    ax1.grid(alpha=0.3)
+    ax.set_xlabel('Number of Vectors')
+    ax.set_ylabel('Mean Latency (ms)')
+    ax.set_title(f'Latency Scaling with Dataset Size (top_k={top_k})')
+    ax.set_xscale('log')
+    ax.legend()
+    ax.grid(alpha=0.3)
     
     # Add dataset labels
     for i, (s, l) in enumerate(zip(sizes, labels)):
-        ax1.annotate(l, (s, max(chroma_lat[i], pg_lat[i])), 
+        ax.annotate(l, (s, max(chroma_lat[i], pg_lat[i])), 
                     textcoords="offset points", xytext=(0, 10), ha='center', fontsize=8)
     
-    # Recall scaling
-    ax2 = axes[1]
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "scaling_latency.png"), dpi=150)
+    plt.close()
+    print("Saved: scaling_latency.png")
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
     chroma_rec = [get_metric(r, 'chroma', top_k, ('recall', 'recall_mean')) or 0 for r in runs]
     pg_rec = [get_metric(r, 'pgvector', top_k, ('recall', 'recall_mean')) or 0 for r in runs]
     
-    ax2.plot(sizes, chroma_rec, 'o-', label='Chroma', color=COLORS['chroma'], linewidth=2, markersize=10)
-    ax2.plot(sizes, pg_rec, 's-', label='pgvector', color=COLORS['pgvector'], linewidth=2, markersize=10)
+    ax.plot(sizes, chroma_rec, 'o-', label='Chroma', color=COLORS['chroma'], linewidth=2, markersize=10)
+    ax.plot(sizes, pg_rec, 's-', label='pgvector', color=COLORS['pgvector'], linewidth=2, markersize=10)
     
-    ax2.set_xlabel('Number of Vectors')
-    ax2.set_ylabel('Recall@k')
-    ax2.set_title(f'Recall Scaling (top_k={top_k}, nofilter)')
-    ax2.set_xscale('log')
-    ax2.set_ylim(0, 1.1)
-    ax2.axhline(y=1.0, color='gray', linestyle='--', alpha=0.3)
-    ax2.legend()
-    ax2.grid(alpha=0.3)
+    ax.set_xlabel('Number of Vectors')
+    ax.set_ylabel('Recall@k')
+    ax.set_title(f'Recall Scaling with Dataset Size (top_k={top_k})')
+    ax.set_xscale('log')
+    ax.set_ylim(0, 1.1)
+    ax.axhline(y=1.0, color='gray', linestyle='--', alpha=0.3)
+    ax.legend()
+    ax.grid(alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig(os.path.join(PLOTS_DIR, "scaling_analysis.png"), dpi=150)
+    plt.savefig(os.path.join(PLOTS_DIR, "scaling_recall.png"), dpi=150)
     plt.close()
-    print("Saved: scaling_analysis.png")
+    print("Saved: scaling_recall.png")
 
 
 def plot_p99_latency(data):
@@ -658,9 +660,6 @@ def plot_throughput_comparison(data):
 
 
 def plot_combined_summary(data):
-    """
-    Create a 2x2 summary plot with key metrics.
-    """
     runs = sort_runs_by_size([r for r in data["runs"] if r["mode"] == "nofilter"])
     if not runs:
         print("Skipping combined summary: no nofilter runs")
@@ -677,82 +676,89 @@ def plot_combined_summary(data):
     
     datasets = [r["dataset"] for r in runs]
     top_k = 10
-    
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     x = np.arange(len(datasets))
     width = 0.35
     
-    # Plot 1: Mean latency
-    ax1 = axes[0, 0]
+    # Compute all metrics once
     chroma_lat = [(get_metric(r, 'chroma', top_k, ('latency', 'mean')) or 0) * 1000 for r in runs]
     pg_lat = [(get_metric(r, 'pgvector', top_k, ('latency', 'mean')) or 0) * 1000 for r in runs]
-    
-    ax1.bar(x - width/2, chroma_lat, width, label='Chroma', color=COLORS['chroma'])
-    ax1.bar(x + width/2, pg_lat, width, label='pgvector', color=COLORS['pgvector'])
-    ax1.set_xlabel('Dataset')
-    ax1.set_ylabel('Mean Latency (ms)')
-    ax1.set_title(f'Query Latency (top_k={top_k})')
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(datasets)
-    ax1.legend()
-    ax1.grid(axis='y', alpha=0.3)
-    
-    # Plot 2: Recall
-    ax2 = axes[0, 1]
     chroma_rec = [get_metric(r, 'chroma', top_k, ('recall', 'recall_mean')) or 0 for r in runs]
     pg_rec = [get_metric(r, 'pgvector', top_k, ('recall', 'recall_mean')) or 0 for r in runs]
-    
-    ax2.bar(x - width/2, chroma_rec, width, label='Chroma', color=COLORS['chroma'])
-    ax2.bar(x + width/2, pg_rec, width, label='pgvector', color=COLORS['pgvector'])
-    ax2.set_xlabel('Dataset')
-    ax2.set_ylabel('Recall@k')
-    ax2.set_title(f'Query Recall (top_k={top_k})')
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(datasets)
-    ax2.set_ylim(0, 1.1)
-    ax2.axhline(y=1.0, color='gray', linestyle='--', alpha=0.3)
-    ax2.legend()
-    ax2.grid(axis='y', alpha=0.3)
-    
-    # Plot 3: Throughput
-    ax3 = axes[1, 0]
     chroma_qps = [1 / (get_metric(r, 'chroma', top_k, ('latency', 'mean')) or 1) for r in runs]
     pg_qps = [1 / (get_metric(r, 'pgvector', top_k, ('latency', 'mean')) or 1) for r in runs]
+    speedup = [c / p if p > 0 else 0 for c, p in zip(chroma_lat, pg_lat)]
     
-    ax3.bar(x - width/2, chroma_qps, width, label='Chroma', color=COLORS['chroma'])
-    ax3.bar(x + width/2, pg_qps, width, label='pgvector', color=COLORS['pgvector'])
-    ax3.set_xlabel('Dataset')
-    ax3.set_ylabel('Queries per Second')
-    ax3.set_title(f'Query Throughput (top_k={top_k})')
-    ax3.set_xticks(x)
-    ax3.set_xticklabels(datasets)
-    ax3.legend()
-    ax3.grid(axis='y', alpha=0.3)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.bar(x - width/2, chroma_lat, width, label='Chroma', color=COLORS['chroma'])
+    ax.bar(x + width/2, pg_lat, width, label='pgvector', color=COLORS['pgvector'])
+    ax.set_xlabel('Dataset')
+    ax.set_ylabel('Mean Latency (ms)')
+    ax.set_title(f'Query Latency Summary (top_k={top_k})')
+    ax.set_xticks(x)
+    ax.set_xticklabels(datasets)
+    ax.legend()
+    ax.grid(axis='y', alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "summary_latency.png"), dpi=150)
+    plt.close()
+    print("Saved: summary_latency.png")
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.bar(x - width/2, chroma_rec, width, label='Chroma', color=COLORS['chroma'])
+    ax.bar(x + width/2, pg_rec, width, label='pgvector', color=COLORS['pgvector'])
+    ax.set_xlabel('Dataset')
+    ax.set_ylabel('Recall@k')
+    ax.set_title(f'Query Recall Summary (top_k={top_k})')
+    ax.set_xticks(x)
+    ax.set_xticklabels(datasets)
+    ax.set_ylim(0, 1.1)
+    ax.axhline(y=1.0, color='gray', linestyle='--', alpha=0.3)
+    ax.legend()
+    ax.grid(axis='y', alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "summary_recall.png"), dpi=150)
+    plt.close()
+    print("Saved: summary_recall.png")
+    
+    # Plot 3: Throughput
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.bar(x - width/2, chroma_qps, width, label='Chroma', color=COLORS['chroma'])
+    ax.bar(x + width/2, pg_qps, width, label='pgvector', color=COLORS['pgvector'])
+    ax.set_xlabel('Dataset')
+    ax.set_ylabel('Queries per Second')
+    ax.set_title(f'Query Throughput Summary (top_k={top_k})')
+    ax.set_xticks(x)
+    ax.set_xticklabels(datasets)
+    ax.legend()
+    ax.grid(axis='y', alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "summary_throughput.png"), dpi=150)
+    plt.close()
+    print("Saved: summary_throughput.png")
     
     # Plot 4: Speedup ratio
-    ax4 = axes[1, 1]
-    speedup = [c / p if p > 0 else 0 for c, p in zip(chroma_lat, pg_lat)]
+    fig, ax = plt.subplots(figsize=(10, 6))
     colors_list = [COLORS['pgvector'] if s > 1 else COLORS['chroma'] for s in speedup]
     
-    bars = ax4.bar(x, speedup, width*1.5, color=colors_list)
-    ax4.axhline(y=1, color='gray', linestyle='--', alpha=0.5)
-    ax4.set_xlabel('Dataset')
-    ax4.set_ylabel('Latency Ratio (Chroma / pgvector)')
-    ax4.set_title('Relative Speed (>1 = pgvector faster)')
-    ax4.set_xticks(x)
-    ax4.set_xticklabels(datasets)
-    ax4.grid(axis='y', alpha=0.3)
+    bars = ax.bar(x, speedup, width*1.5, color=colors_list)
+    ax.axhline(y=1, color='gray', linestyle='--', alpha=0.5)
+    ax.set_xlabel('Dataset')
+    ax.set_ylabel('Latency Ratio (Chroma / pgvector)')
+    ax.set_title('Relative Speed (>1 = pgvector faster)')
+    ax.set_xticks(x)
+    ax.set_xticklabels(datasets)
+    ax.grid(axis='y', alpha=0.3)
     
     # Add value labels
     for bar, val in zip(bars, speedup):
         label = f'{val:.1f}x'
-        ax4.annotate(label, xy=(bar.get_x() + bar.get_width()/2, bar.get_height()),
+        ax.annotate(label, xy=(bar.get_x() + bar.get_width()/2, bar.get_height()),
                     ha='center', va='bottom', fontsize=9)
     
     plt.tight_layout()
-    plt.savefig(os.path.join(PLOTS_DIR, "combined_summary.png"), dpi=150)
+    plt.savefig(os.path.join(PLOTS_DIR, "summary_speedup.png"), dpi=150)
     plt.close()
-    print("Saved: combined_summary.png")
+    print("Saved: summary_speedup.png")
 
 
 def print_summary_table(data):
@@ -784,6 +790,549 @@ def print_summary_table(data):
         print("-" * 130)
 
 
+def get_index_param_label(run):
+    """Generate a label for index parameters."""
+    idx_type = run.get("index_type", "unknown")
+    params = run.get("index_params", {})
+    
+    if idx_type == "hnsw":
+        m = params.get("m", "?")
+        ef = params.get("ef_construction", "?")
+        return f"HNSW(m={m},ef={ef})"
+    elif idx_type == "ivfflat":
+        lists = params.get("lists", "?")
+        return f"IVFFlat(lists={lists})"
+    else:
+        return idx_type
+
+
+def plot_index_params_latency(data):
+    runs = [r for r in data["runs"] if r["mode"] == "nofilter"]
+    
+    # Group by dataset
+    by_dataset = {}
+    for run in runs:
+        ds = run["dataset"]
+        if ds not in by_dataset:
+            by_dataset[ds] = []
+        by_dataset[ds].append(run)
+    
+    # Find datasets with multiple index configs
+    multi_config_datasets = {k: v for k, v in by_dataset.items() if len(v) > 1}
+    
+    if not multi_config_datasets:
+        print("Skipping index params latency: no datasets with multiple index configurations")
+        return
+    
+    for dataset, runs_list in multi_config_datasets.items():
+        fig, ax = plt.subplots(figsize=(12, 6))
+        
+        # Sort by index type then params
+        runs_list = sorted(runs_list, key=lambda r: (r.get("index_type", ""), str(r.get("index_params", {}))))
+        
+        labels = [get_index_param_label(r) for r in runs_list]
+        x = np.arange(len(labels))
+        width = 0.35
+        top_k = 10
+        
+        chroma_lat = [(get_metric(r, 'chroma', top_k, ('latency', 'mean')) or 0) * 1000 for r in runs_list]
+        pg_lat = [(get_metric(r, 'pgvector', top_k, ('latency', 'mean')) or 0) * 1000 for r in runs_list]
+        
+        bars1 = ax.bar(x - width/2, chroma_lat, width, label='Chroma', color=COLORS['chroma'])
+        bars2 = ax.bar(x + width/2, pg_lat, width, label='pgvector', color=COLORS['pgvector'])
+        
+        # Add value labels
+        for bar, val in zip(bars1, chroma_lat):
+            if val > 0:
+                ax.annotate(f'{val:.2f}', xy=(bar.get_x() + bar.get_width()/2, bar.get_height()),
+                           ha='center', va='bottom', fontsize=8)
+        for bar, val in zip(bars2, pg_lat):
+            if val > 0:
+                ax.annotate(f'{val:.2f}', xy=(bar.get_x() + bar.get_width()/2, bar.get_height()),
+                           ha='center', va='bottom', fontsize=8)
+        
+        ax.set_xlabel('Index Configuration')
+        ax.set_ylabel('Mean Latency (ms)')
+        ax.set_title(f'Index Parameter Impact on Latency ({dataset}, top_k={top_k})')
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels, rotation=15, ha='right')
+        ax.legend()
+        ax.grid(axis='y', alpha=0.3)
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(PLOTS_DIR, f"index_params_latency_{dataset}.png"), dpi=150)
+        plt.close()
+        print(f"Saved: index_params_latency_{dataset}.png")
+
+
+def plot_index_params_recall(data):
+    runs = [r for r in data["runs"] if r["mode"] == "nofilter"]
+    
+    # Group by dataset
+    by_dataset = {}
+    for run in runs:
+        ds = run["dataset"]
+        if ds not in by_dataset:
+            by_dataset[ds] = []
+        by_dataset[ds].append(run)
+    
+    # Find datasets with multiple index configs
+    multi_config_datasets = {k: v for k, v in by_dataset.items() if len(v) > 1}
+    
+    if not multi_config_datasets:
+        print("Skipping index params recall: no datasets with multiple index configurations")
+        return
+    
+    for dataset, runs_list in multi_config_datasets.items():
+        fig, ax = plt.subplots(figsize=(12, 6))
+        
+        # Sort by index type then params
+        runs_list = sorted(runs_list, key=lambda r: (r.get("index_type", ""), str(r.get("index_params", {}))))
+        
+        labels = [get_index_param_label(r) for r in runs_list]
+        x = np.arange(len(labels))
+        width = 0.35
+        top_k = 10
+        
+        chroma_rec = [get_metric(r, 'chroma', top_k, ('recall', 'recall_mean')) or 0 for r in runs_list]
+        pg_rec = [get_metric(r, 'pgvector', top_k, ('recall', 'recall_mean')) or 0 for r in runs_list]
+        
+        bars1 = ax.bar(x - width/2, chroma_rec, width, label='Chroma', color=COLORS['chroma'])
+        bars2 = ax.bar(x + width/2, pg_rec, width, label='pgvector', color=COLORS['pgvector'])
+        
+        # Add value labels
+        for bar, val in zip(bars1, chroma_rec):
+            if val > 0:
+                ax.annotate(f'{val:.2%}', xy=(bar.get_x() + bar.get_width()/2, bar.get_height()),
+                           ha='center', va='bottom', fontsize=8)
+        for bar, val in zip(bars2, pg_rec):
+            if val > 0:
+                ax.annotate(f'{val:.2%}', xy=(bar.get_x() + bar.get_width()/2, bar.get_height()),
+                           ha='center', va='bottom', fontsize=8)
+        
+        ax.set_xlabel('Index Configuration')
+        ax.set_ylabel('Recall@k')
+        ax.set_title(f'Index Parameter Impact on Recall ({dataset}, top_k={top_k})')
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels, rotation=15, ha='right')
+        ax.set_ylim(0, 1.1)
+        ax.axhline(y=1.0, color='gray', linestyle='--', alpha=0.3)
+        ax.legend()
+        ax.grid(axis='y', alpha=0.3)
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(PLOTS_DIR, f"index_params_recall_{dataset}.png"), dpi=150)
+        plt.close()
+        print(f"Saved: index_params_recall_{dataset}.png")
+
+
+def plot_index_params_tradeoff(data):
+    runs = [r for r in data["runs"] if r["mode"] == "nofilter"]
+    
+    # Group by dataset
+    by_dataset = {}
+    for run in runs:
+        ds = run["dataset"]
+        if ds not in by_dataset:
+            by_dataset[ds] = []
+        by_dataset[ds].append(run)
+    
+    # Find datasets with multiple index configs
+    multi_config_datasets = {k: v for k, v in by_dataset.items() if len(v) > 1}
+    
+    if not multi_config_datasets:
+        print("Skipping index params tradeoff: no datasets with multiple index configurations")
+        return
+    
+    for dataset, runs_list in multi_config_datasets.items():
+        fig, ax = plt.subplots(figsize=(10, 7))
+        
+        top_k = 10
+        
+        for run in runs_list:
+            label = get_index_param_label(run)
+            idx_type = run.get("index_type", "unknown")
+            
+            # Chroma point
+            c_lat = (get_metric(run, 'chroma', top_k, ('latency', 'mean')) or 0) * 1000
+            c_rec = get_metric(run, 'chroma', top_k, ('recall', 'recall_mean')) or 0
+            
+            # pgvector point
+            p_lat = (get_metric(run, 'pgvector', top_k, ('latency', 'mean')) or 0) * 1000
+            p_rec = get_metric(run, 'pgvector', top_k, ('recall', 'recall_mean')) or 0
+            
+            # Color based on index type
+            if idx_type == "hnsw":
+                marker_pg = 's'
+                color_pg = COLORS['hnsw']
+            else:
+                marker_pg = '^'
+                color_pg = COLORS['ivfflat']
+            
+            # Plot Chroma (always HNSW)
+            ax.scatter(c_lat, c_rec, c=COLORS['chroma'], s=150, marker='o', 
+                      edgecolors='black', linewidths=0.5, zorder=3)
+            ax.annotate(f'Chroma\n{label}', xy=(c_lat, c_rec), xytext=(5, 5),
+                       textcoords='offset points', fontsize=7, ha='left')
+            
+            # Plot pgvector
+            ax.scatter(p_lat, p_rec, c=color_pg, s=150, marker=marker_pg,
+                      edgecolors='black', linewidths=0.5, zorder=3)
+            ax.annotate(f'pgvector\n{label}', xy=(p_lat, p_rec), xytext=(5, -10),
+                       textcoords='offset points', fontsize=7, ha='left')
+        
+        ax.set_xlabel('Mean Latency (ms)')
+        ax.set_ylabel('Recall@k')
+        ax.set_title(f'Latency vs Recall Tradeoff by Index Configuration ({dataset}, top_k={top_k})')
+        ax.set_ylim(0, 1.1)
+        ax.axhline(y=1.0, color='gray', linestyle='--', alpha=0.3)
+        ax.grid(alpha=0.3)
+        
+        # Legend
+        from matplotlib.lines import Line2D
+        legend_elements = [
+            Line2D([0], [0], marker='o', color='w', markerfacecolor=COLORS['chroma'], 
+                   markersize=10, label='Chroma'),
+            Line2D([0], [0], marker='s', color='w', markerfacecolor=COLORS['hnsw'], 
+                   markersize=10, label='pgvector HNSW'),
+            Line2D([0], [0], marker='^', color='w', markerfacecolor=COLORS['ivfflat'], 
+                   markersize=10, label='pgvector IVFFlat'),
+        ]
+        ax.legend(handles=legend_elements, loc='lower right')
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(PLOTS_DIR, f"index_params_tradeoff_{dataset}.png"), dpi=150)
+        plt.close()
+        print(f"Saved: index_params_tradeoff_{dataset}.png")
+
+
+def plot_index_type_comparison(data):
+    runs = [r for r in data["runs"] if r["mode"] == "nofilter"]
+    
+    # Group by dataset
+    by_dataset = {}
+    for run in runs:
+        ds = run["dataset"]
+        if ds not in by_dataset:
+            by_dataset[ds] = []
+        by_dataset[ds].append(run)
+    
+    # Find datasets with both HNSW and IVFFlat
+    datasets_with_both = {}
+    for ds, runs_list in by_dataset.items():
+        idx_types = set(r.get("index_type") for r in runs_list)
+        if "hnsw" in idx_types and "ivfflat" in idx_types:
+            datasets_with_both[ds] = runs_list
+    
+    if not datasets_with_both:
+        print("Skipping index type comparison: no datasets with both HNSW and IVFFlat")
+        return
+    
+    for dataset, runs_list in datasets_with_both.items():
+        # Separate by index type
+        hnsw_runs = [r for r in runs_list if r.get("index_type") == "hnsw"]
+        ivfflat_runs = [r for r in runs_list if r.get("index_type") == "ivfflat"]
+        
+        fig, ax = plt.subplots(figsize=(12, 6))
+        
+        top_k = 10
+        
+        # Collect all configs
+        all_configs = []
+        for r in hnsw_runs:
+            params = r.get("index_params", {})
+            all_configs.append({
+                "label": f"HNSW(m={params.get('m')},ef={params.get('ef_construction')})",
+                "type": "hnsw",
+                "latency": (get_metric(r, 'pgvector', top_k, ('latency', 'mean')) or 0) * 1000,
+                "recall": get_metric(r, 'pgvector', top_k, ('recall', 'recall_mean')) or 0
+            })
+        for r in ivfflat_runs:
+            params = r.get("index_params", {})
+            all_configs.append({
+                "label": f"IVFFlat(lists={params.get('lists')})",
+                "type": "ivfflat",
+                "latency": (get_metric(r, 'pgvector', top_k, ('latency', 'mean')) or 0) * 1000,
+                "recall": get_metric(r, 'pgvector', top_k, ('recall', 'recall_mean')) or 0
+            })
+        
+        # Sort by latency
+        all_configs.sort(key=lambda x: x["latency"])
+        
+        labels = [c["label"] for c in all_configs]
+        latencies = [c["latency"] for c in all_configs]
+        recalls = [c["recall"] for c in all_configs]
+        colors = [COLORS['hnsw'] if c["type"] == "hnsw" else COLORS['ivfflat'] for c in all_configs]
+        
+        x = np.arange(len(labels))
+        width = 0.35
+        
+        # Latency bars
+        bars = ax.bar(x, latencies, width, color=colors, edgecolor='black', linewidth=0.5)
+        
+        # Add recall as text on bars
+        for i, (bar, rec) in enumerate(zip(bars, recalls)):
+            ax.annotate(f'{rec:.1%}\nrecall', xy=(bar.get_x() + bar.get_width()/2, bar.get_height()),
+                       ha='center', va='bottom', fontsize=8)
+        
+        ax.set_xlabel('Index Configuration')
+        ax.set_ylabel('Mean Latency (ms)')
+        ax.set_title(f'pgvector: HNSW vs IVFFlat Comparison ({dataset}, top_k={top_k})')
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels, rotation=20, ha='right')
+        ax.grid(axis='y', alpha=0.3)
+        
+        # Legend
+        from matplotlib.patches import Patch
+        legend_elements = [
+            Patch(facecolor=COLORS['hnsw'], edgecolor='black', label='HNSW'),
+            Patch(facecolor=COLORS['ivfflat'], edgecolor='black', label='IVFFlat'),
+        ]
+        ax.legend(handles=legend_elements)
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(PLOTS_DIR, f"index_type_comparison_{dataset}.png"), dpi=150)
+        plt.close()
+        print(f"Saved: index_type_comparison_{dataset}.png")
+
+
+def plot_distance_metric_latency(data):
+    runs = [r for r in data["runs"] if r["mode"] == "nofilter"]
+    
+    # Group by dataset
+    by_dataset = {}
+    for run in runs:
+        ds = run["dataset"]
+        if ds not in by_dataset:
+            by_dataset[ds] = []
+        by_dataset[ds].append(run)
+    
+    # Find datasets with multiple distance metrics
+    multi_metric_datasets = {}
+    for ds, runs_list in by_dataset.items():
+        metrics = set(r.get("metric", "euclidean") for r in runs_list)
+        if len(metrics) > 1:
+            multi_metric_datasets[ds] = runs_list
+    
+    if not multi_metric_datasets:
+        print("Skipping distance metric latency: no datasets with multiple distance metrics")
+        return
+    
+    for dataset, runs_list in multi_metric_datasets.items():
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        # Group by metric
+        by_metric = {}
+        for run in runs_list:
+            metric = run.get("metric", "euclidean")
+            if metric not in by_metric:
+                by_metric[metric] = run
+        
+        metrics = sorted(by_metric.keys())
+        x = np.arange(len(metrics))
+        width = 0.35
+        top_k = 10
+        
+        chroma_lat = [(get_metric(by_metric[m], 'chroma', top_k, ('latency', 'mean')) or 0) * 1000 for m in metrics]
+        pg_lat = [(get_metric(by_metric[m], 'pgvector', top_k, ('latency', 'mean')) or 0) * 1000 for m in metrics]
+        
+        bars1 = ax.bar(x - width/2, chroma_lat, width, label='Chroma', color=COLORS['chroma'])
+        bars2 = ax.bar(x + width/2, pg_lat, width, label='pgvector', color=COLORS['pgvector'])
+        
+        # Add value labels
+        for bar, val in zip(bars1, chroma_lat):
+            if val > 0:
+                ax.annotate(f'{val:.2f}ms', xy=(bar.get_x() + bar.get_width()/2, bar.get_height()),
+                           ha='center', va='bottom', fontsize=9)
+        for bar, val in zip(bars2, pg_lat):
+            if val > 0:
+                ax.annotate(f'{val:.2f}ms', xy=(bar.get_x() + bar.get_width()/2, bar.get_height()),
+                           ha='center', va='bottom', fontsize=9)
+        
+        ax.set_xlabel('Distance Metric')
+        ax.set_ylabel('Mean Latency (ms)')
+        ax.set_title(f'Distance Metric Impact on Latency ({dataset}, top_k={top_k})')
+        ax.set_xticks(x)
+        ax.set_xticklabels([m.capitalize() for m in metrics])
+        ax.legend()
+        ax.grid(axis='y', alpha=0.3)
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(PLOTS_DIR, f"distance_metric_latency_{dataset}.png"), dpi=150)
+        plt.close()
+        print(f"Saved: distance_metric_latency_{dataset}.png")
+
+
+def plot_distance_metric_recall(data):
+    """
+    Compare recall across different distance metrics (euclidean vs cosine).
+    """
+    runs = [r for r in data["runs"] if r["mode"] == "nofilter"]
+    
+    # Group by dataset
+    by_dataset = {}
+    for run in runs:
+        ds = run["dataset"]
+        if ds not in by_dataset:
+            by_dataset[ds] = []
+        by_dataset[ds].append(run)
+    
+    # Find datasets with multiple distance metrics
+    multi_metric_datasets = {}
+    for ds, runs_list in by_dataset.items():
+        metrics = set(r.get("metric", "euclidean") for r in runs_list)
+        if len(metrics) > 1:
+            multi_metric_datasets[ds] = runs_list
+    
+    if not multi_metric_datasets:
+        print("Skipping distance metric recall: no datasets with multiple distance metrics")
+        return
+    
+    for dataset, runs_list in multi_metric_datasets.items():
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        # Group by metric
+        by_metric = {}
+        for run in runs_list:
+            metric = run.get("metric", "euclidean")
+            if metric not in by_metric:
+                by_metric[metric] = run
+        
+        metrics = sorted(by_metric.keys())
+        x = np.arange(len(metrics))
+        width = 0.35
+        top_k = 10
+        
+        chroma_rec = [get_metric(by_metric[m], 'chroma', top_k, ('recall', 'recall_mean')) or 0 for m in metrics]
+        pg_rec = [get_metric(by_metric[m], 'pgvector', top_k, ('recall', 'recall_mean')) or 0 for m in metrics]
+        
+        bars1 = ax.bar(x - width/2, chroma_rec, width, label='Chroma', color=COLORS['chroma'])
+        bars2 = ax.bar(x + width/2, pg_rec, width, label='pgvector', color=COLORS['pgvector'])
+        
+        # Add value labels
+        for bar, val in zip(bars1, chroma_rec):
+            if val > 0:
+                ax.annotate(f'{val:.1%}', xy=(bar.get_x() + bar.get_width()/2, bar.get_height()),
+                           ha='center', va='bottom', fontsize=9)
+        for bar, val in zip(bars2, pg_rec):
+            if val > 0:
+                ax.annotate(f'{val:.1%}', xy=(bar.get_x() + bar.get_width()/2, bar.get_height()),
+                           ha='center', va='bottom', fontsize=9)
+        
+        ax.set_xlabel('Distance Metric')
+        ax.set_ylabel('Recall@k')
+        ax.set_title(f'Distance Metric Impact on Recall ({dataset}, top_k={top_k})')
+        ax.set_xticks(x)
+        ax.set_xticklabels([m.capitalize() for m in metrics])
+        ax.set_ylim(0, 1.1)
+        ax.axhline(y=1.0, color='gray', linestyle='--', alpha=0.3)
+        ax.legend()
+        ax.grid(axis='y', alpha=0.3)
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(PLOTS_DIR, f"distance_metric_recall_{dataset}.png"), dpi=150)
+        plt.close()
+        print(f"Saved: distance_metric_recall_{dataset}.png")
+
+
+def plot_distance_metric_comparison(data):
+    runs = [r for r in data["runs"] if r["mode"] == "nofilter"]
+    
+    # Group by dataset
+    by_dataset = {}
+    for run in runs:
+        ds = run["dataset"]
+        if ds not in by_dataset:
+            by_dataset[ds] = []
+        by_dataset[ds].append(run)
+    
+    # Find datasets with multiple distance metrics
+    multi_metric_datasets = {}
+    for ds, runs_list in by_dataset.items():
+        metrics = set(r.get("metric", "euclidean") for r in runs_list)
+        if len(metrics) > 1:
+            multi_metric_datasets[ds] = runs_list
+    
+    if not multi_metric_datasets:
+        print("Skipping distance metric comparison: no datasets with multiple distance metrics")
+        return
+    
+    for dataset, runs_list in multi_metric_datasets.items():
+        # Group by metric
+        by_metric = {}
+        for run in runs_list:
+            metric = run.get("metric", "euclidean")
+            if metric not in by_metric:
+                by_metric[metric] = run
+        
+        metrics = sorted(by_metric.keys())
+        top_k = 10
+        
+        # Collect data
+        data_points = []
+        for metric in metrics:
+            run = by_metric[metric]
+            # Chroma
+            c_lat = (get_metric(run, 'chroma', top_k, ('latency', 'mean')) or 0) * 1000
+            c_rec = get_metric(run, 'chroma', top_k, ('recall', 'recall_mean')) or 0
+            if c_lat > 0:
+                data_points.append({
+                    'db': 'Chroma',
+                    'metric': metric.capitalize(),
+                    'latency': c_lat,
+                    'recall': c_rec
+                })
+            # pgvector
+            p_lat = (get_metric(run, 'pgvector', top_k, ('latency', 'mean')) or 0) * 1000
+            p_rec = get_metric(run, 'pgvector', top_k, ('recall', 'recall_mean')) or 0
+            if p_lat > 0:
+                data_points.append({
+                    'db': 'pgvector',
+                    'metric': metric.capitalize(),
+                    'latency': p_lat,
+                    'recall': p_rec
+                })
+        
+        if not data_points:
+            continue
+        
+        fig, ax = plt.subplots(figsize=(10, 7))
+        
+        # Plot as scatter with annotations
+        for dp in data_points:
+            color = COLORS['chroma'] if dp['db'] == 'Chroma' else COLORS['pgvector']
+            marker = 'o' if dp['db'] == 'Chroma' else 's'
+            
+            ax.scatter(dp['latency'], dp['recall'], c=color, s=200, marker=marker,
+                      edgecolors='black', linewidths=0.5, zorder=3)
+            ax.annotate(f"{dp['db']}\n{dp['metric']}", 
+                       xy=(dp['latency'], dp['recall']), 
+                       xytext=(8, 0), textcoords='offset points',
+                       fontsize=9, ha='left', va='center')
+        
+        ax.set_xlabel('Mean Latency (ms)')
+        ax.set_ylabel('Recall@k')
+        ax.set_title(f'Distance Metric Impact: Latency vs Recall ({dataset}, top_k={top_k})')
+        ax.set_ylim(0, 1.1)
+        ax.axhline(y=1.0, color='gray', linestyle='--', alpha=0.3)
+        ax.grid(alpha=0.3)
+        
+        # Legend
+        from matplotlib.lines import Line2D
+        legend_elements = [
+            Line2D([0], [0], marker='o', color='w', markerfacecolor=COLORS['chroma'], 
+                   markersize=10, label='Chroma'),
+            Line2D([0], [0], marker='s', color='w', markerfacecolor=COLORS['pgvector'], 
+                   markersize=10, label='pgvector'),
+        ]
+        ax.legend(handles=legend_elements, loc='lower right')
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(PLOTS_DIR, f"distance_metric_comparison_{dataset}.png"), dpi=150)
+        plt.close()
+        print(f"Saved: distance_metric_comparison_{dataset}.png")
+
+
 def main():
     """Generate all query benchmark plots."""
     os.makedirs(PLOTS_DIR, exist_ok=True)
@@ -802,7 +1351,6 @@ def main():
     
     print(f"\nGenerating plots...")
     
-    # Generate all plots
     plot_latency_comparison(data)
     plot_recall_comparison(data)
     plot_latency_vs_recall(data)
@@ -812,6 +1360,13 @@ def main():
     plot_p99_latency(data)
     plot_throughput_comparison(data)
     plot_combined_summary(data)
+    plot_index_params_latency(data)
+    plot_index_params_recall(data)
+    plot_index_params_tradeoff(data)
+    plot_index_type_comparison(data)
+    plot_distance_metric_latency(data)
+    plot_distance_metric_recall(data)
+    plot_distance_metric_comparison(data)
     
     # Print summary table
     print_summary_table(data)
