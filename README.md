@@ -342,13 +342,8 @@ lsof -i :8000  # Chroma
 
 ---
 
-## License
 
-This project is part of academic coursework at NTUA. See [LICENSE](LICENSE) for details.
+## Contributors
 
----
-
-## Authors
-
-- Advanced Database Systems Course Project, NTUA 2025-2026
+- Leonidas Anagnou, Elena Krontira
 
